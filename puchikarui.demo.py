@@ -21,7 +21,7 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
-from puchikarui import Schema, DataSource, Table
+from puchikarui import *
 
 class SchemaDemo(Schema):
     def __init__(self, data_source=None):
