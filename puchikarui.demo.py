@@ -24,33 +24,33 @@
 from puchikarui import Schema, DataSource, Table
 
 class SchemaDemo(Schema):
-	def __init__(self, data_source=None):
-		Schema.__init__(self, data_source)
-		self.add_table('person', ['name', 'age'])
+    def __init__(self, data_source=None):
+        Schema.__init__(self, data_source)
+        self.add_table('person', ['name', 'age'])
 
 def main():
-	db = SchemaDemo.connect('./puchikarui.test.db')
-	
-	# We can excute SQLite script as usual ...
-	db.ds().executescript('''
-	DROP TABLE IF EXISTS person; 
-	CREATE TABLE person(name, age);
-	INSERT INTO person 
-	VALUES
-	 ('Ji', 28)
-	,('Zen', 25)
-	,('Ka', 32)
-	''')
-	
-	# Or use this ORM-like method
-	# It's not robust yet, just a simple util code block
-	db.person.insert(['Morio', 29])
-	db.person.insert(['Kent', 42])
-	persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
-	for person in persons:
-		print("I'm %s. My age is %d" % (person.name, person.age))
-	db.close()
-	pass
+    db = SchemaDemo.connect('./puchikarui.test.db')
+    
+    # We can excute SQLite script as usual ...
+    db.ds().executescript('''
+    DROP TABLE IF EXISTS person; 
+    CREATE TABLE person(name, age);
+    INSERT INTO person 
+    VALUES
+     ('Ji', 28)
+    ,('Zen', 25)
+    ,('Ka', 32)
+    ''')
+    
+    # Or use this ORM-like method
+    # It's not robust yet, just a simple util code block
+    db.person.insert(['Morio', 29])
+    db.person.insert(['Kent', 42])
+    persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
+    for person in persons:
+        print("I'm %s. My age is %d" % (person.name, person.age))
+    db.close()
+    pass
 
 if __name__ == "__main__":
-	main()
+    main()
