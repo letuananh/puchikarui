@@ -97,10 +97,17 @@ class DataSource:
         self.conn = sqlite3.connect(self.get_path())
         self.cur = self.conn.cursor()
         self.conn.row_factory = sqlite3.Row
-
+        
+    def commit(self):
+        if self.conn:
+            try:
+                self.conn.commit()
+            except Exception as e:
+                print("Cannot commit changes. e = %s" % e)
+    
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
-        if not self.conn:
+        if (not self.conn):
             self.open()
         if params: 
             return self.cur.execute(query, params)
@@ -124,10 +131,35 @@ class DataSource:
                 self.conn.close()
         except:
             print("Error while closing connection")
+        finally:
+            self.conn = None
+
+class Execution(object):
+    ''' Create a context to work with a schema which closes connection when destroyed
+    '''
+    def __init__(self, schema):
+        self.schema = schema
+    
+    def __enter__(self):
+        self.ds = self.schema.ds()
+        return self
+        
+    def __exit__(self, type, value, traceback):
+        try:
+            self.ds.close()
+        except Exception as e:
+            print("Error was raised while closing DB connection. e = %s" % e)
+        finally:
+            self.ds = None
 
 class Schema(object):
+    ''' Contains schema definition of a database
+    '''
     def __init__(self, data_source=None):
-        self.data_source = data_source
+        if type(data_source) is DataSource:
+            self.data_source = data_source
+        else:
+            self.data_source = DataSource(data_source)
       
     def add_table(self, name, columns):
         setattr(self, name, Table(name, columns, self.data_source))
@@ -137,24 +169,31 @@ class Schema(object):
     
     @classmethod
     def connect(cls, filepath):
+        ''' [DEPRECATED] Connect to a database
+        It's possible to pass a string directly into the constructor to create a Schema object
+        so this method is no longer in used
+        '''
         return cls(DataSource(filepath))
-        
+    
     def close(self):
         self.ds().close()
-
-#-------------------------------------------------------------
-# Schema definition
-#-------------------------------------------------------------
-#class SchemaDemo(Schema):
-    #def define(self):
-        #self.table('person', ['name', 'age'])
+        
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, type, value, traceback):
+        try:
+            # print("Closing database ...")
+            self.close()
+        except Exception as e:
+            # [TODO] Log exception properly
+            print("Error was raised while closing DB connection. e = %s" % e)
 
 #-------------------------------------------------------------
 # Main
 #-------------------------------------------------------------
 def main():
     print("PuchiKarui is a Python module, not an application")
-    # s = SchemaDemo()
 
 #-------------------------------------------------------------
 if __name__ == "__main__":
