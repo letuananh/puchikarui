@@ -47,21 +47,37 @@ class Table:
     def __str__(self):
         return "Table: %s - Columns: %s" % (self.name, self.columns) 
 
-    def to_table(self, row_tuples):
+    def to_table(self, row_tuples, columns=None):
         if not row_tuples:
             return None
         else:
             #return [ self.template(*x) for x in row_tuples if len(x) == len(self.columns) ]
-            return [ self.template(*x) for x in row_tuples ]
+            if columns:
+                new_tuples = collections.namedtuple(self.name, columns)
+                return [ new_tuples(*x) for x in row_tuples ]
+            else:
+                return [ self.template(*x) for x in row_tuples ]
 
     def to_row(self, row_tuple):
         return self.template(*row_tuple)
 
-    def select(self, where=None, values=None, orderby=None, limit=None):
+    def select_single(self, where=None, values=None, orderby=None, limit=None,columns=None):
+        ''' Select a single row
+        '''
+        result = self.select(where, values, orderby, limit, columns)
+        if result and len(result) > 0:
+            return result[0]
+        else:
+            return None
+
+    def select(self, where=None, values=None, orderby=None, limit=None,columns=None):
         if not self.data_source:
             return None
         else:
-            query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
+            if columns is not None:
+                query = "SELECT %s FROM %s " % (','.join(columns), self.name)
+            else:
+                query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
             if where:
                 query += " WHERE " + where
             if orderby:
@@ -69,7 +85,7 @@ class Table:
             if limit:
                 query += " LIMIT %s" % limit
             result = self.data_source.execute(query, values)
-        return self.to_table(result)
+        return self.to_table(result, columns)
 
     def insert(self, values):
         if not self.data_source:
@@ -161,8 +177,10 @@ class Schema(object):
         else:
             self.data_source = DataSource(data_source)
       
-    def add_table(self, name, columns):
+    def add_table(self, name, columns, alias=None):
         setattr(self, name, Table(name, columns, self.data_source))
+        if alias:
+            setattr(self, alias, Table(name, columns, self.data_source))
         
     def ds(self):
         return self.data_source
