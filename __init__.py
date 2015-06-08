@@ -3,4 +3,4 @@
 
 from puchikarui.puchikarui import Schema, Execution, DataSource, Table
 
-__all__ = ["Schema", "DataSource", "Table"]
+__all__ = ["Schema", "Execution", "DataSource", "Table"]
