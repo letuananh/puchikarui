@@ -38,119 +38,181 @@ import collections
 
 # A table schema
 class Table:
-	def __init__(self, name, columns, data_source=None):
-		self.name = name
-		self.columns = columns
-		self.data_source = data_source
-		self.template = collections.namedtuple(self.name, self.columns)
+    def __init__(self, name, columns, data_source=None):
+        self.name = name
+        self.columns = columns
+        self.data_source = data_source
+        self.template = collections.namedtuple(self.name, self.columns)
 
-	def __str__(self):
-		return "Table: %s - Columns: %s" % (self.name, self.columns) 
+    def __str__(self):
+        return "Table: %s - Columns: %s" % (self.name, self.columns) 
 
-	def to_table(self, row_tuples):
-		if not row_tuples:
-			return None
-		else:
-			#return [ self.template(*x) for x in row_tuples if len(x) == len(self.columns) ]
-			return [ self.template(*x) for x in row_tuples ]
+    def to_table(self, row_tuples, columns=None):
+        if not row_tuples:
+            return None
+        else:
+            #return [ self.template(*x) for x in row_tuples if len(x) == len(self.columns) ]
+            if columns:
+                new_tuples = collections.namedtuple(self.name, columns)
+                return [ new_tuples(*x) for x in row_tuples ]
+            else:
+                return [ self.template(*x) for x in row_tuples ]
 
-	def to_row(self, row_tuple):
-		return self.template(*row_tuple)
+    def to_row(self, row_tuple):
+        return self.template(*row_tuple)
 
-	def select(self, where=None, values=None, orderby=None, limit=None):
-		if not self.data_source:
-			return None
-		else:
-			query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
-			if where:
-				query += " WHERE " + where
-			if orderby:
-				query += " ORDER BY %s" % orderby
-			if limit:
-				query += " LIMIT %s" % limit
-			result = self.data_source.execute(query, values)
-		return self.to_table(result)
+    def select_single(self, where=None, values=None, orderby=None, limit=None,columns=None):
+        ''' Select a single row
+        '''
+        result = self.select(where, values, orderby, limit, columns)
+        if result and len(result) > 0:
+            return result[0]
+        else:
+            return None
 
-	def insert(self, values):
-		if not self.data_source:
-			return None
-		else:
-			query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, ','.join(self.columns), ','.join(['?']*len(self.columns)))
-			try:
-				result = self.data_source.execute(query, values)
-				return result
-			except Exception, e:
-				print("Error: \n Query: %s \n Values: %s \n %s" % (query, values, e))
-		
+    def select(self, where=None, values=None, orderby=None, limit=None,columns=None):
+        if not self.data_source:
+            return None
+        else:
+            if columns is not None:
+                query = "SELECT %s FROM %s " % (','.join(columns), self.name)
+            else:
+                query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
+            if where:
+                query += " WHERE " + where
+            if orderby:
+                query += " ORDER BY %s" % orderby
+            if limit:
+                query += " LIMIT %s" % limit
+            result = self.data_source.execute(query, values)
+        return self.to_table(result, columns)
+
+    def insert(self, values):
+        if not self.data_source:
+            return None
+        else:
+            query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, ','.join(self.columns), ','.join(['?']*len(self.columns)))
+            try:
+                result = self.data_source.execute(query, values)
+                return result
+            except Exception as e:
+                print("Error: \n Query: %s \n Values: %s \n %s" % (query, values, e))
+        
 # Represent a database connection
 class DataSource:
-	  
-	def __init__(self, filepath, auto_connect=True):
-		self.filepath = filepath
-		if auto_connect:
-			self.open()
+      
+    def __init__(self, filepath, auto_connect=True):
+        self.filepath = filepath
+        if auto_connect:
+            self.open()
 
-	def get_path(self):
-		return self.filepath
+    def get_path(self):
+        return self.filepath
 
-	def open(self):
-		self.conn = sqlite3.connect(self.get_path())
-		self.cur = self.conn.cursor()
-		self.conn.row_factory = sqlite3.Row
+    def open(self):
+        self.conn = sqlite3.connect(self.get_path())
+        self.cur = self.conn.cursor()
+        self.conn.row_factory = sqlite3.Row
+        
+    def commit(self):
+        if self.conn:
+            try:
+                self.conn.commit()
+            except Exception as e:
+                print("Cannot commit changes. e = %s" % e)
+    
+    def execute(self, query, params=None):
+        # Try to connect to DB if not connected
+        if (not self.conn):
+            self.open()
+        if params: 
+            return self.cur.execute(query, params)
+        else:
+            return self.cur.execute(query)
 
-	def execute(self, query, params=None):
-		# Try to connect to DB if not connected
-		if not self.conn:
-			self.open()
-		if params: 
-			return self.cur.execute(query, params)
-		else:
-			return self.cur.execute(query)
+    def executescript(self, query):
+        # Try to connect to DB if not connected
+        if not self.conn:
+            self.open()
+        return self.cur.executescript(query)
+        
+    def executefile(self, file_loc):
+        with open(file_loc, 'r') as script_file:
+            script_text = script_file.read()
+            self.executescript(script_text)
 
-	def executescript(self, query):
-		# Try to connect to DB if not connected
-		if not self.conn:
-			self.open()
-		return self.cur.executescript(query)
+    def close(self):
+        try:
+            if self.conn:
+                self.conn.close()
+        except:
+            print("Error while closing connection")
+        finally:
+            self.conn = None
 
-	def close(self):
-		try:
-			if self.conn:
-				self.conn.close()
-		except:
-			print("Error while closing connection")
+class Execution(object):
+    ''' Create a context to work with a schema which closes connection when destroyed
+    '''
+    def __init__(self, schema):
+        self.schema = schema
+    
+    def __enter__(self):
+        self.ds = self.schema.ds()
+        return self
+        
+    def __exit__(self, type, value, traceback):
+        try:
+            self.ds.close()
+        except Exception as e:
+            print("Error was raised while closing DB connection. e = %s" % e)
+        finally:
+            self.ds = None
 
 class Schema(object):
-	def __init__(self, data_source=None):
-		self.data_source = data_source
-	  
-	def add_table(self, name, columns):
-		setattr(self, name, Table(name, columns, self.data_source))
-		
-	def ds(self):
-		return self.data_source
-	
-	@classmethod
-	def connect(cls, filepath):
-		return cls(DataSource(filepath))
-		
-	def close(self):
-		self.ds().close()
-
-#-------------------------------------------------------------
-# Schema definition
-#-------------------------------------------------------------
-#class SchemaDemo(Schema):
-	#def define(self):
-		#self.table('person', ['name', 'age'])
+    ''' Contains schema definition of a database
+    '''
+    def __init__(self, data_source=None):
+        if type(data_source) is DataSource:
+            self.data_source = data_source
+        else:
+            self.data_source = DataSource(data_source)
+      
+    def add_table(self, name, columns, alias=None):
+        setattr(self, name, Table(name, columns, self.data_source))
+        if alias:
+            setattr(self, alias, Table(name, columns, self.data_source))
+        
+    def ds(self):
+        return self.data_source
+    
+    @classmethod
+    def connect(cls, filepath):
+        ''' [DEPRECATED] Connect to a database
+        It's possible to pass a string directly into the constructor to create a Schema object
+        so this method is no longer in used
+        '''
+        return cls(DataSource(filepath))
+    
+    def close(self):
+        self.ds().close()
+        
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, type, value, traceback):
+        try:
+            # print("Closing database ...")
+            self.close()
+        except Exception as e:
+            # [TODO] Log exception properly
+            print("Error was raised while closing DB connection. e = %s" % e)
 
 #-------------------------------------------------------------
 # Main
 #-------------------------------------------------------------
 def main():
-	print("PuchiKarui is a Python module, not an application")
-	# s = SchemaDemo()
+    print("PuchiKarui is a Python module, not an application")
 
 #-------------------------------------------------------------
 if __name__ == "__main__":
-	main()
+    main()
