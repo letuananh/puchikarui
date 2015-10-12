@@ -26,6 +26,7 @@ import codecs
 import sqlite3
 import os
 import collections
+import logging
 
 #-------------------------------------------------------------
 # CONFIGURATION
@@ -96,7 +97,7 @@ class Table:
                 result = self.data_source.execute(query, values)
                 return result
             except Exception as e:
-                print("Error: \n Query: %s \n Values: %s \n %s" % (query, values, e))
+                logging.error("Error: \n Query: %s \n Values: %s \n %s" % (query, values, e))
         
 # Represent a database connection
 class DataSource:
@@ -110,16 +111,19 @@ class DataSource:
         return self.filepath
 
     def open(self):
-        self.conn = sqlite3.connect(self.get_path())
-        self.cur = self.conn.cursor()
-        self.conn.row_factory = sqlite3.Row
-        
+        try:
+            self.conn = sqlite3.connect(self.get_path())
+            self.cur = self.conn.cursor()
+            self.conn.row_factory = sqlite3.Row
+        except Exception as e:
+            logging.error("Error was raised while trying to connect to DB file: %s\nException info: %s" % (self.get_path(),e))
+
     def commit(self):
         if self.conn:
             try:
                 self.conn.commit()
             except Exception as e:
-                print("Cannot commit changes. e = %s" % e)
+                logging.error("Cannot commit changes. e = %s" % e)
     
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
@@ -146,7 +150,7 @@ class DataSource:
             if self.conn:
                 self.conn.close()
         except:
-            print("Error while closing connection")
+            logging.error("Error while closing connection")
         finally:
             self.conn = None
 
@@ -164,7 +168,7 @@ class Execution(object):
         try:
             self.ds.close()
         except Exception as e:
-            print("Error was raised while closing DB connection. e = %s" % e)
+            loggin.error("Error was raised while closing DB connection. e = %s" % e)
         finally:
             self.ds = None
 
@@ -201,11 +205,11 @@ class Schema(object):
         
     def __exit__(self, type, value, traceback):
         try:
-            # print("Closing database ...")
+            # logging.error("Closing database ...")
             self.close()
         except Exception as e:
             # [TODO] Log exception properly
-            print("Error was raised while closing DB connection. e = %s" % e)
+            logging.error("Error was raised while closing DB connection. e = %s" % e)
 
 #-------------------------------------------------------------
 # Main
