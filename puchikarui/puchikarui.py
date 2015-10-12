@@ -116,7 +116,9 @@ class DataSource:
             self.cur = self.conn.cursor()
             self.conn.row_factory = sqlite3.Row
         except Exception as e:
-            logging.error("Error was raised while trying to connect to DB file: %s\nException info: %s" % (self.get_path(),e))
+            logging.error("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
+            logging.error(e)
+            raise
 
     def commit(self):
         if self.conn:
