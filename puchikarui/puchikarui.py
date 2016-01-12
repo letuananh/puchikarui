@@ -43,7 +43,13 @@ class Table:
         self.name = name
         self.columns = columns
         self.data_source = data_source
-        self.template = collections.namedtuple(self.name, self.columns)
+        
+        try:
+            collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
+        except Exception as ex:
+            print("WARNING: Bad database design detected (Table: %s (%s)" % (name, columns))
+            
+        self.template = collections.namedtuple(self.name, self.columns, rename=True)
 
     def __str__(self):
         return "Table: %s - Columns: %s" % (self.name, self.columns) 
@@ -54,7 +60,7 @@ class Table:
         else:
             #return [ self.template(*x) for x in row_tuples if len(x) == len(self.columns) ]
             if columns:
-                new_tuples = collections.namedtuple(self.name, columns)
+                new_tuples = collections.namedtuple(self.name, columns, rename=True)
                 return [ new_tuples(*x) for x in row_tuples ]
             else:
                 return [ self.template(*x) for x in row_tuples ]
@@ -116,7 +122,7 @@ class DataSource:
             self.cur = self.conn.cursor()
             self.conn.row_factory = sqlite3.Row
         except Exception as e:
-            logging.error("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
+            logging.error("ErrorError was raised while trying to connect to DB file: %s" % (self.get_path(),))
             logging.error(e)
             raise
 
@@ -184,9 +190,10 @@ class Schema(object):
             self.data_source = DataSource(data_source)
       
     def add_table(self, name, columns, alias=None):
-        setattr(self, name, Table(name, columns, self.data_source))
+        tbl_obj = Table(name, columns, self.data_source)
+        setattr(self, name, tbl_obj)
         if alias:
-            setattr(self, alias, Table(name, columns, self.data_source))
+            setattr(self, alias, tbl_obj)
         
     def ds(self):
         return self.data_source
