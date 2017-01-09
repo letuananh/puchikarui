@@ -94,22 +94,31 @@ class Table:
             result = self.data_source.execute(query, values)
         return self.to_table(result, columns)
 
-    def insert(self, values):
+    def insert(self, values, columns=None):
         if not self.data_source:
             return None
         else:
-            query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, ','.join(self.columns), ','.join(['?']*len(self.columns)))
+            if columns:
+                column_names = ','.join(columns)
+            elif len(values) < len(self.columns):
+                column_names = ','.join(self.columns[-len(values):])
+            else:
+                column_names = ','.join(self.columns)
+            query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, column_names, ','.join(['?']*len(values)))
             try:
                 result = self.data_source.execute(query, values)
                 return result
             except Exception as e:
-                logging.error("Error: \n Query: %s \n Values: %s \n %s" % (query, values, e))
-        
+                logging.error("Error: \n DB: %s \n Query: %s \n Values: %s \n %s" % (self.data_source.filepath, query, values, e))
+
+
 # Represent a database connection
 class DataSource:
-      
+
     def __init__(self, filepath, auto_connect=True):
         self.filepath = filepath
+        self.conn = None
+        self.cur = None
         if auto_connect:
             self.open()
 
@@ -122,7 +131,7 @@ class DataSource:
             self.cur = self.conn.cursor()
             self.conn.row_factory = sqlite3.Row
         except Exception as e:
-            logging.error("ErrorError was raised while trying to connect to DB file: %s" % (self.get_path(),))
+            logging.error("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
             logging.error(e)
             raise
 
@@ -132,12 +141,12 @@ class DataSource:
                 self.conn.commit()
             except Exception as e:
                 logging.error("Cannot commit changes. e = %s" % e)
-    
+
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         if (not self.conn):
             self.open()
-        if params: 
+        if params:
             return self.cur.execute(query, params)
         else:
             return self.cur.execute(query)
@@ -147,7 +156,7 @@ class DataSource:
         if not self.conn:
             self.open()
         return self.cur.executescript(query)
-        
+
     def executefile(self, file_loc):
         with open(file_loc, 'r') as script_file:
             script_text = script_file.read()
@@ -162,42 +171,45 @@ class DataSource:
         finally:
             self.conn = None
 
+
 class Execution(object):
     ''' Create a context to work with a schema which closes connection when destroyed
     '''
     def __init__(self, schema):
         self.schema = schema
-    
+
     def __enter__(self):
         self.ds = self.schema.ds()
         return self
-        
+
     def __exit__(self, type, value, traceback):
         try:
             self.ds.close()
         except Exception as e:
-            loggin.error("Error was raised while closing DB connection. e = %s" % e)
+            logging.error("Error was raised while closing DB connection. e = %s" % e)
         finally:
             self.ds = None
+
 
 class Schema(object):
     ''' Contains schema definition of a database
     '''
-    def __init__(self, data_source=None):
+    def __init__(self, data_source=None, auto_connect=False, auto_commit=True):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
-            self.data_source = DataSource(data_source)
-      
+            self.data_source = DataSource(data_source, auto_connect)
+        self.auto_commit = auto_commit
+
     def add_table(self, name, columns, alias=None):
         tbl_obj = Table(name, columns, self.data_source)
         setattr(self, name, tbl_obj)
         if alias:
             setattr(self, alias, tbl_obj)
-        
+
     def ds(self):
         return self.data_source
-    
+
     @classmethod
     def connect(cls, filepath):
         ''' [DEPRECATED] Connect to a database
@@ -205,13 +217,30 @@ class Schema(object):
         so this method is no longer in used
         '''
         return cls(DataSource(filepath))
-    
+
+    def reconnect(self, silent=True):
+        try:
+            self.ds().close()
+        except:
+            if not silent:
+                raise
+        self.ds().open()
+
+    def commit(self, silent=False):
+        try:
+            self.ds().commit()
+        except:
+            if not silent:
+                raise
+
     def close(self):
+        if self.auto_commit:
+            self.ds().commit()
         self.ds().close()
-        
+
     def __enter__(self):
         return self
-        
+
     def __exit__(self, type, value, traceback):
         try:
             # logging.error("Closing database ...")
