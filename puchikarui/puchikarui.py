@@ -21,10 +21,7 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
-import sys
-import codecs
 import sqlite3
-import os
 import collections
 import logging
 
@@ -37,22 +34,23 @@ import logging
 # A minimalist SQLite wrapper library for Python which supports ORM features too.
 #-------------------------------------------------------------
 
+
 # A table schema
 class Table:
     def __init__(self, name, columns, data_source=None):
         self.name = name
         self.columns = columns
         self.data_source = data_source
-        
+
         try:
             collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
         except Exception as ex:
             print("WARNING: Bad database design detected (Table: %s (%s)" % (name, columns))
-            
+
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
 
     def __str__(self):
-        return "Table: %s - Columns: %s" % (self.name, self.columns) 
+        return "Table: %s - Columns: %s" % (self.name, self.columns)
 
     def to_table(self, row_tuples, columns=None):
         if not row_tuples:
@@ -61,14 +59,14 @@ class Table:
             #return [ self.template(*x) for x in row_tuples if len(x) == len(self.columns) ]
             if columns:
                 new_tuples = collections.namedtuple(self.name, columns, rename=True)
-                return [ new_tuples(*x) for x in row_tuples ]
+                return [new_tuples(*x) for x in row_tuples]
             else:
-                return [ self.template(*x) for x in row_tuples ]
+                return [self.template(*x) for x in row_tuples]
 
     def to_row(self, row_tuple):
         return self.template(*row_tuple)
 
-    def select_single(self, where=None, values=None, orderby=None, limit=None,columns=None):
+    def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None):
         ''' Select a single row
         '''
         result = self.select(where, values, orderby, limit, columns)
@@ -77,7 +75,7 @@ class Table:
         else:
             return None
 
-    def select(self, where=None, values=None, orderby=None, limit=None,columns=None):
+    def select(self, where=None, values=None, orderby=None, limit=None, columns=None):
         if not self.data_source:
             return None
         else:
@@ -96,7 +94,7 @@ class Table:
 
     def insert(self, values, columns=None):
         if not self.data_source:
-            return None
+            raise Exception("There is no available data source")
         else:
             if columns:
                 column_names = ','.join(columns)
@@ -104,12 +102,26 @@ class Table:
                 column_names = ','.join(self.columns[-len(values):])
             else:
                 column_names = ','.join(self.columns)
-            query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, column_names, ','.join(['?']*len(values)))
+            query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, column_names, ','.join(['?'] * len(values)))
             try:
                 result = self.data_source.execute(query, values)
                 return result
             except Exception as e:
                 logging.error("Error: \n DB: %s \n Query: %s \n Values: %s \n %s" % (self.data_source.filepath, query, values, e))
+
+    def delete(self, where=None, values=None):
+        if where:
+            query = "DELETE FROM {tbl} WHERE {where}".format(tbl=self.name, where=where)
+        else:
+            query = "DELETE FROM {tbl}".format(tbl=self.name)
+        try:
+            logging.debug("Executing: {q} | values={v}".format(q=query, v=values))
+            self.data_source.execute(query, values)
+            self.data_source.commit()
+            self.data_source.close()
+        except Exception as e:
+                logging.error("Error: \n DB: %s \n Query: %s \n Values: %s \n %s" % (self.data_source.filepath, query, values, e))
+                raise e
 
 
 # Represent a database connection
@@ -144,7 +156,7 @@ class DataSource:
 
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
-        if (not self.conn):
+        if self.conn is None:
             self.open()
         if params:
             return self.cur.execute(query, params)
@@ -153,7 +165,7 @@ class DataSource:
 
     def executescript(self, query):
         # Try to connect to DB if not connected
-        if not self.conn:
+        if self.conn is None:
             self.open()
         return self.cur.executescript(query)
 
@@ -164,7 +176,7 @@ class DataSource:
 
     def close(self):
         try:
-            if self.conn:
+            if self.conn is not None:
                 self.conn.close()
         except:
             logging.error("Error while closing connection")
@@ -249,11 +261,14 @@ class Schema(object):
             # [TODO] Log exception properly
             logging.error("Error was raised while closing DB connection. e = %s" % e)
 
+
 #-------------------------------------------------------------
 # Main
 #-------------------------------------------------------------
+
 def main():
     print("PuchiKarui is a Python module, not an application")
+
 
 #-------------------------------------------------------------
 if __name__ == "__main__":
