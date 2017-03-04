@@ -1,26 +1,57 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
+'''
+Mini SQLite ORM engine
+Latest version can be found at https://github.com/letuananh/puchikarui
 
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+References:
+    Python documentation:
+        https://docs.python.org/
+    Python unittest
+        https://docs.python.org/3/library/unittest.html
+    --
+    argparse module:
+        https://docs.python.org/3/howto/argparse.html
+    PEP 257 - Python Docstring Conventions:
+        https://www.python.org/dev/peps/pep-0257/
 
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
+@author: Le Tuan Anh <tuananh.ke@gmail.com>
+'''
 
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
 
+# Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+__author__ = "Le Tuan Anh <tuananh.ke@gmail.com>"
+__copyright__ = "Copyright 2017, puchikarui"
+__credits__ = []
+__license__ = "MIT"
+__version__ = "0.1"
+__maintainer__ = "Le Tuan Anh"
+__email__ = "<tuananh.ke@gmail.com>"
+__status__ = "Prototype"
+
+#-------------------------------------------------------------
+
+import os
 import sqlite3
 import collections
 import logging
@@ -127,12 +158,17 @@ class Table:
 # Represent a database connection
 class DataSource:
 
-    def __init__(self, filepath, auto_connect=True):
+    def __init__(self, filepath, setup_script=None, setup_file=None):
         self.filepath = filepath
         self.conn = None
         self.cur = None
-        if auto_connect:
-            self.open()
+        if setup_file is not None:
+            with open(setup_file, 'r') as scriptfile:
+                logging.debug("Setup script file provided: {}".format(setup_file))
+                self.setup_file = scriptfile.read()
+        else:
+            self.setup_file = None
+        self.setup_script = setup_script
 
     def get_path(self):
         return self.filepath
@@ -142,6 +178,14 @@ class DataSource:
             self.conn = sqlite3.connect(self.get_path())
             self.cur = self.conn.cursor()
             self.conn.row_factory = sqlite3.Row
+            if not os.path.isfile(self.get_path()) or os.path.getsize(self.get_path()) == 0:
+                print("Need setup")
+                # run setup script
+                if self.setup_file is not None:
+                    self.cur.executescript(self.setup_file)
+                if self.setup_script is not None:
+                    self.cur.executescript(self.setup_script)
+                self.conn.commit()
         except Exception as e:
             logging.error("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
             logging.error(e)
@@ -206,11 +250,11 @@ class Execution(object):
 class Schema(object):
     ''' Contains schema definition of a database
     '''
-    def __init__(self, data_source=None, auto_connect=False, auto_commit=True):
+    def __init__(self, data_source, setup_script=None, setup_file=None, auto_commit=True):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
-            self.data_source = DataSource(data_source, auto_connect)
+            self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file)
         self.auto_commit = auto_commit
 
     def add_table(self, name, columns, alias=None):

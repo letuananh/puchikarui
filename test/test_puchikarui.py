@@ -19,29 +19,29 @@ References:
 @author: Le Tuan Anh <tuananh.ke@gmail.com>
 '''
 
-# Copyright (c) 2015, Le Tuan Anh <tuananh.ke@gmail.com>
-#
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
-#
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
-#
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
+# Copyright (c) 2014-2017, Le Tuan Anh <tuananh.ke@gmail.com>
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 __author__ = "Le Tuan Anh <tuananh.ke@gmail.com>"
-__copyright__ = "Copyright 2015, pydemo"
-__credits__ = [ "Le Tuan Anh" ]
+__copyright__ = "Copyright 2017, puchikarui"
+__credits__ = []
 __license__ = "MIT"
 __version__ = "0.1"
 __maintainer__ = "Le Tuan Anh"
@@ -50,54 +50,59 @@ __status__ = "Prototype"
 
 ########################################################################
 
-import sys
 import os
-import argparse
 import unittest
-from puchikarui import *
+import logging
+from puchikarui import Schema
+
+#----------------------------------------------------------------------
+# Configuration
+#----------------------------------------------------------------------
+
+TEST_DIR = os.path.dirname(__file__)
+SETUP_SCRIPT = os.path.join(TEST_DIR, 'data', 'init_script.sql')
+TEST_DB = os.path.join(TEST_DIR, 'data', 'test.db')
+
 
 ########################################################################
 
 class SchemaDemo(Schema):
-    def __init__(self, data_source=None):
-        Schema.__init__(self, data_source)
+    def __init__(self, data_source, setup_script=None, setup_file=None):
+        Schema.__init__(self, data_source, setup_script=setup_script, setup_file=setup_file)
         self.add_table('person', ['name', 'age'])
+
 
 ########################################################################
 
 class TestDemoLib(unittest.TestCase):
 
+    def setUp(self):
+        if os.path.isfile(TEST_DB):
+            logging.debug("Test DB exists, removing it now")
+            os.unlink(TEST_DB)
+
     def test_basic(self):
         print("Testing basic database actions")
-        db = SchemaDemo.connect('./puchikarui.test.db')
+        db = SchemaDemo(TEST_DB, setup_file=SETUP_SCRIPT, setup_script="INSERT INTO person VALUES ('Chun', 78)")
         # We can excute SQLite script as usual ...
-        db.ds().executescript('''
-        DROP TABLE IF EXISTS person; 
-        CREATE TABLE person(name, age);
-        INSERT INTO person 
-        VALUES
-         ('Ji', 28)
-        ,('Zen', 25)
-        ,('Ka', 32)
-        ''')
-
+        db.ds().execute("INSERT INTO person VALUES ('Chen', 15)")
         # Or use this ORM-like method
         # It's not robust yet, just a simple util code block
         db.person.insert(['Morio', 29])
         db.person.insert(['Kent', 42])
+        db.commit()
         persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
         db.close()
-        
-        expected = [ ('Ji', 28), ('Morio', 29), ('Ka', 32), ('Kent', 42) ] 
-        actual   = [ (person.name, person.age) for person in persons ]
-        
-        self.assertTrue(expected, actual)
-        
+        expected = [('Ji', 28), ('Morio', 29), ('Ka', 32), ('Kent', 42), ('Chun', 78)]
+        actual = [(person.name, person.age) for person in persons]
+        self.assertEqual(expected, actual)
+
 
 ########################################################################
 
 def main():
     unittest.main()
+
 
 if __name__ == "__main__":
     main()
