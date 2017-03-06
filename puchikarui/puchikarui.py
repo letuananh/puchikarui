@@ -173,6 +173,16 @@ class DataSource:
     def get_path(self):
         return self.filepath
 
+    def is_online(self):
+        ''' Check if Data Source is serving '''
+        try:
+            if self.conn is not None:
+                return self.execute("SELECT 1;").fetchone()[0]
+        except Exception as e:
+            # make sure to close DB connection in the end
+            self.close()
+        return False
+
     def open(self):
         try:
             self.conn = sqlite3.connect(self.get_path())
@@ -197,6 +207,8 @@ class DataSource:
                 self.conn.commit()
             except Exception as e:
                 logging.error("Cannot commit changes. e = %s" % e)
+            finally:
+                self.conn = None
 
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
