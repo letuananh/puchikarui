@@ -60,14 +60,15 @@ from puchikarui import Schema
 #----------------------------------------------------------------------
 
 TEST_DIR = os.path.dirname(__file__)
-SETUP_SCRIPT = os.path.join(TEST_DIR, 'data', 'init_script.sql')
+SETUP_FILE = os.path.join(TEST_DIR, 'data', 'init_script.sql')
+SETUP_SCRIPT = "INSERT INTO person VALUES ('Chun', 78)"
 TEST_DB = os.path.join(TEST_DIR, 'data', 'test.db')
 
 
 ########################################################################
 
 class SchemaDemo(Schema):
-    def __init__(self, data_source, setup_script=None, setup_file=None):
+    def __init__(self, data_source, setup_script=None, setup_file=SETUP_FILE):
         Schema.__init__(self, data_source, setup_script=setup_script, setup_file=setup_file)
         self.add_table('person', ['name', 'age'])
 
@@ -83,19 +84,27 @@ class TestDemoLib(unittest.TestCase):
 
     def test_basic(self):
         print("Testing basic database actions")
-        db = SchemaDemo(TEST_DB, setup_file=SETUP_SCRIPT, setup_script="INSERT INTO person VALUES ('Chun', 78)")
+        db = SchemaDemo(TEST_DB, setup_file=SETUP_FILE, setup_script=SETUP_SCRIPT)
         # We can excute SQLite script as usual ...
-        db.ds().execute("INSERT INTO person VALUES ('Chen', 15)")
+        db.ds.execute("INSERT INTO person VALUES ('Chen', 15)")
         # Or use this ORM-like method
         # It's not robust yet, just a simple util code block
+        # Test insert
         db.person.insert(['Morio', 29])
         db.person.insert(['Kent', 42])
-        db.commit()
+        # Test select data
         persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
-        db.close()
         expected = [('Ji', 28), ('Morio', 29), ('Ka', 32), ('Kent', 42), ('Chun', 78)]
         actual = [(person.name, person.age) for person in persons]
         self.assertEqual(expected, actual)
+        # Test select single
+        ji = db.person.select_single('name=?', ('Ji',))
+        self.assertIsNotNone(ji)
+        self.assertEqual(ji.age, 28)
+        # Test delete
+        db.person.delete(where='age > ?', values=(70,))
+        chun = db.person.select_single('name=?', ('Chun',))
+        self.assertIsNone(chun)
 
 
 ########################################################################

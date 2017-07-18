@@ -21,36 +21,34 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
-from puchikarui import *
+from puchikarui import Schema
+
 
 class SchemaDemo(Schema):
-    def __init__(self, data_source=None):
+    def __init__(self, data_source):
         Schema.__init__(self, data_source)
         self.add_table('person', ['name', 'age'])
 
+
 def main():
-    db = SchemaDemo.connect('./puchikarui.test.db')
-    
+    db = SchemaDemo('./puchikarui.test.db')
     # We can excute SQLite script as usual ...
-    db.ds().executescript('''
-    DROP TABLE IF EXISTS person; 
+    db.ds.executescript(''' DROP TABLE IF EXISTS person;
     CREATE TABLE person(name, age);
-    INSERT INTO person 
-    VALUES
-     ('Ji', 28)
+    INSERT INTO person
+    VALUES ('Ji', 28)
     ,('Zen', 25)
-    ,('Ka', 32)
-    ''')
-    
+    ,('Ka', 32)''')
     # Or use this ORM-like method
     # It's not robust yet, just a simple util code block
     db.person.insert(['Morio', 29])
     db.person.insert(['Kent', 42])
     persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
+
+    print("There are {} people.".format(len(persons)))
     for person in persons:
-        print("I'm %s. My age is %d" % (person.name, person.age))
-    db.close()
-    pass
+        print("%s is %d years old." % (person.name, person.age))
+
 
 if __name__ == "__main__":
     main()

@@ -60,6 +60,9 @@ import logging
 # CONFIGURATION
 #-------------------------------------------------------------
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
 #-------------------------------------------------------------
 # PuchiKarui
 # A minimalist SQLite wrapper library for Python which supports ORM features too.
@@ -71,23 +74,20 @@ class Table:
     def __init__(self, name, columns, data_source=None):
         self.name = name
         self.columns = columns
-        self.data_source = data_source
-
+        self._data_source = data_source
         try:
             collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
         except Exception as ex:
             print("WARNING: Bad database design detected (Table: %s (%s)" % (name, columns))
-
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
 
     def __str__(self):
-        return "Table: %s - Columns: %s" % (self.name, self.columns)
+        return "Table: %s - Cols: %s" % (self.name, self.columns)
 
     def to_table(self, row_tuples, columns=None):
         if not row_tuples:
             return None
         else:
-            #return [ self.template(*x) for x in row_tuples if len(x) == len(self.columns) ]
             if columns:
                 new_tuples = collections.namedtuple(self.name, columns, rename=True)
                 return [new_tuples(*x) for x in row_tuples]
@@ -97,132 +97,140 @@ class Table:
     def to_row(self, row_tuple):
         return self.template(*row_tuple)
 
-    def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None):
+    def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, exe=None):
         ''' Select a single row
         '''
-        result = self.select(where, values, orderby, limit, columns)
+        result = self.select(where, values, orderby, limit, columns, exe)
         if result and len(result) > 0:
             return result[0]
         else:
             return None
 
-    def select(self, where=None, values=None, orderby=None, limit=None, columns=None):
-        if not self.data_source:
-            return None
+    def select(self, where=None, values=None, orderby=None, limit=None, columns=None, exe=None):
+        if columns is not None:
+            query = "SELECT %s FROM %s " % (','.join(columns), self.name)
         else:
-            if columns is not None:
-                query = "SELECT %s FROM %s " % (','.join(columns), self.name)
-            else:
-                query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
-            if where:
-                query += " WHERE " + where
-            if orderby:
-                query += " ORDER BY %s" % orderby
-            if limit:
-                query += " LIMIT %s" % limit
-            result = self.data_source.execute(query, values)
-        return self.to_table(result, columns)
-
-    def insert(self, values, columns=None):
-        if not self.data_source:
-            raise Exception("There is no available data source")
+            query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
+        if where:
+            query += " WHERE " + where
+        if orderby:
+            query += " ORDER BY %s" % orderby
+        if limit:
+            query += " LIMIT %s" % limit
+        if exe is not None:
+            return self.to_table(exe.execute(query, values))
         else:
-            if columns:
-                column_names = ','.join(columns)
-            elif len(values) < len(self.columns):
-                column_names = ','.join(self.columns[-len(values):])
-            else:
-                column_names = ','.join(self.columns)
-            query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, column_names, ','.join(['?'] * len(values)))
-            try:
-                result = self.data_source.execute(query, values)
-                return result
-            except Exception as e:
-                logging.error("Error: \n DB: %s \n Query: %s \n Values: %s \n %s" % (self.data_source.filepath, query, values, e))
+            with self._data_source.open() as exe:
+                result = exe.execute(query, values)
+                return self.to_table(result, columns)
 
-    def delete(self, where=None, values=None):
+    def insert(self, values, columns=None, exe=None):
+        ''' Insert an active record into DB and return lastrowid if available '''
+        if columns:
+            column_names = ','.join(columns)
+        elif len(values) < len(self.columns):
+            column_names = ','.join(self.columns[-len(values):])
+        else:
+            column_names = ','.join(self.columns)
+        query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, column_names, ','.join(['?'] * len(values)))
+        if exe is not None:
+            exe.execute(query, values)
+            return exe.cur.lastrowid
+        else:
+            with self._data_source.open() as exe:
+                exe.execute(query, values)
+                return exe.cur.lastrowid
+
+    def delete(self, where=None, values=None, exe=None):
         if where:
             query = "DELETE FROM {tbl} WHERE {where}".format(tbl=self.name, where=where)
         else:
             query = "DELETE FROM {tbl}".format(tbl=self.name)
-        try:
-            logging.debug("Executing: {q} | values={v}".format(q=query, v=values))
-            self.data_source.execute(query, values)
-            self.data_source.commit()
-            self.data_source.close()
-        except Exception as e:
-                logging.error("Error: \n DB: %s \n Query: %s \n Values: %s \n %s" % (self.data_source.filepath, query, values, e))
-                raise e
+        logger.debug("Executing: {q} | values={v}".format(q=query, v=values))
+
+        if exe is not None:
+            exe.execute(query, values)
+        else:
+            with self._data_source.open() as exe:
+                exe.execute(query, values)
 
 
-# Represent a database connection
 class DataSource:
 
-    def __init__(self, filepath, setup_script=None, setup_file=None):
-        self.filepath = filepath
-        self.conn = None
-        self.cur = None
+    def __init__(self, db_path, setup_script=None, setup_file=None, auto_commit=True):
+        self._filepath = db_path
+        self._setup_script = setup_script
+        self.auto_commit = auto_commit
         if setup_file is not None:
             with open(setup_file, 'r') as scriptfile:
-                logging.debug("Setup script file provided: {}".format(setup_file))
-                self.setup_file = scriptfile.read()
+                logger.debug("Setup script file provided: {}".format(setup_file))
+                self._setup_file = scriptfile.read()
         else:
-            self.setup_file = None
-        self.setup_script = setup_script
+            self._setup_file = None
 
-    def get_path(self):
-        return self.filepath
+    @property
+    def path(self):
+        return self._filepath
 
-    def is_online(self):
-        ''' Check if Data Source is serving '''
+    def open(self, auto_commit=None):
+        ''' Create a context to execute queries '''
         try:
-            if self.conn is not None:
-                return self.execute("SELECT 1;").fetchone()[0]
-        except Exception as e:
-            # make sure to close DB connection in the end
-            self.close()
-        return False
-
-    def open(self):
-        try:
-            self.conn = sqlite3.connect(self.get_path())
-            self.cur = self.conn.cursor()
-            self.conn.row_factory = sqlite3.Row
-            if not os.path.isfile(self.get_path()) or os.path.getsize(self.get_path()) == 0:
-                print("Need setup")
+            if auto_commit is not None:
+                exe = Execution(self.path, auto_commit=auto_commit)
+            else:
+                exe = Execution(self.path, auto_commit=self.auto_commit)
+            # setup DB if required
+            if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
+                logger.warning("DB does not exist. Setup is required.")
                 # run setup script
-                if self.setup_file is not None:
-                    self.cur.executescript(self.setup_file)
-                if self.setup_script is not None:
-                    self.cur.executescript(self.setup_script)
-                self.conn.commit()
+                if self._setup_file is not None:
+                    exe.cur.executescript(self._setup_file)
+                if self._setup_script is not None:
+                    exe.cur.executescript(self._setup_script)
+                exe.conn.commit()
+            return exe
         except Exception as e:
-            logging.error("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
-            logging.error(e)
+            logger.exception("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
             raise
+
+    # Helper functions
+    def execute(self, query, params=None):
+        with self.open() as exe:
+            return exe.execute(query, params)
+
+    def executescript(self, query):
+        with self.open() as exe:
+            return exe.executescript(query)
+
+    def executefile(self, file_loc):
+        with self.open() as exe:
+            return exe.executefile(file_loc)
+
+
+class Execution(object):
+    ''' Create a context to work with a schema which closes connection when destroyed
+    '''
+    def __init__(self, path, auto_commit=True):
+        self.conn = sqlite3.connect(path)
+        self.conn.row_factory = sqlite3.Row
+        self.cur = self.conn.cursor()
+        self.auto_commit = auto_commit
 
     def commit(self):
         if self.conn:
             try:
                 self.conn.commit()
             except Exception as e:
-                logging.error("Cannot commit changes. e = %s" % e)
-            finally:
-                self.conn = None
+                logging.exception("Cannot commit changes. e = %s" % e)
 
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
-        if self.conn is None:
-            self.open()
         if params:
             return self.cur.execute(query, params)
         else:
             return self.cur.execute(query)
 
     def executescript(self, query):
-        # Try to connect to DB if not connected
-        if self.conn is None:
-            self.open()
         return self.cur.executescript(query)
 
     def executefile(self, file_loc):
@@ -233,30 +241,22 @@ class DataSource:
     def close(self):
         try:
             if self.conn is not None:
+                if self.auto_commit:
+                    self.commit()
                 self.conn.close()
         except:
-            logging.error("Error while closing connection")
+            logging.exception("Error while closing connection")
         finally:
             self.conn = None
 
-
-class Execution(object):
-    ''' Create a context to work with a schema which closes connection when destroyed
-    '''
-    def __init__(self, schema):
-        self.schema = schema
-
     def __enter__(self):
-        self.ds = self.schema.ds()
         return self
 
     def __exit__(self, type, value, traceback):
         try:
-            self.ds.close()
+            self.close()
         except Exception as e:
-            logging.error("Error was raised while closing DB connection. e = %s" % e)
-        finally:
-            self.ds = None
+            logger.exception("Error was raised while closing DB connection. e = %s" % e)
 
 
 class Schema(object):
@@ -266,7 +266,7 @@ class Schema(object):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
-            self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file)
+            self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file, auto_commit=auto_commit)
         self.auto_commit = auto_commit
 
     def add_table(self, name, columns, alias=None):
@@ -275,47 +275,9 @@ class Schema(object):
         if alias:
             setattr(self, alias, tbl_obj)
 
+    @property
     def ds(self):
         return self.data_source
-
-    @classmethod
-    def connect(cls, filepath):
-        ''' [DEPRECATED] Connect to a database
-        It's possible to pass a string directly into the constructor to create a Schema object
-        so this method is no longer in used
-        '''
-        return cls(DataSource(filepath))
-
-    def reconnect(self, silent=True):
-        try:
-            self.ds().close()
-        except:
-            if not silent:
-                raise
-        self.ds().open()
-
-    def commit(self, silent=False):
-        try:
-            self.ds().commit()
-        except:
-            if not silent:
-                raise
-
-    def close(self):
-        if self.auto_commit:
-            self.ds().commit()
-        self.ds().close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        try:
-            # logging.error("Closing database ...")
-            self.close()
-        except Exception as e:
-            # [TODO] Log exception properly
-            logging.error("Error was raised while closing DB connection. e = %s" % e)
 
 
 #-------------------------------------------------------------
