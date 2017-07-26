@@ -172,26 +172,19 @@ class DataSource:
     def path(self):
         return self._filepath
 
-    def open(self, auto_commit=None):
+    def open(self, schema=None, auto_commit=None):
         ''' Create a context to execute queries '''
-        try:
-            if auto_commit is not None:
-                exe = Execution(self.path, auto_commit=auto_commit)
-            else:
-                exe = Execution(self.path, auto_commit=self.auto_commit)
-            # setup DB if required
-            if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
-                logger.warning("DB does not exist. Setup is required.")
-                # run setup script
-                if self._setup_file is not None:
-                    exe.cur.executescript(self._setup_file)
-                if self._setup_script is not None:
-                    exe.cur.executescript(self._setup_script)
-                exe.conn.commit()
-            return exe
-        except Exception as e:
-            logger.exception("Error was raised while trying to connect to DB file: %s" % (self.get_path(),))
-            raise
+        ac = auto_commit if auto_commit is not None else self.auto_commit
+        exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
+        # setup DB if required
+        if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
+            logger.warning("DB does not exist. Setup is required.")
+            # run setup script
+            if self._setup_file is not None:
+                exe.cur.executescript(self._setup_file)
+            if self._setup_script is not None:
+                exe.cur.executescript(self._setup_script)
+        return exe
 
     # Helper functions
     def execute(self, query, params=None):
@@ -207,13 +200,14 @@ class DataSource:
             return exe.executefile(file_loc)
 
 
-class Execution(object):
+class ExecutionContext(object):
     ''' Create a context to work with a schema which closes connection when destroyed
     '''
-    def __init__(self, path, auto_commit=True):
+    def __init__(self, path, schema, auto_commit=True):
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.cur = self.conn.cursor()
+        self.schema = schema
         self.auto_commit = auto_commit
 
     def commit(self):
@@ -249,6 +243,12 @@ class Execution(object):
         finally:
             self.conn = None
 
+    def __getattr__(self, name):
+        if not self.schema or name not in self.schema._tables:
+            raise AttributeError('Attribute {} does not exist'.format(name))
+        else:
+            return self.schema.table
+
     def __enter__(self):
         return self
 
@@ -268,16 +268,22 @@ class Schema(object):
         else:
             self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file, auto_commit=auto_commit)
         self.auto_commit = auto_commit
+        self._tables = {}
 
     def add_table(self, name, columns, alias=None):
         tbl_obj = Table(name, columns, self.data_source)
         setattr(self, name, tbl_obj)
+        self._tables[name] = tbl_obj
         if alias:
             setattr(self, alias, tbl_obj)
+            self._tables[alias] = tbl_obj
 
     @property
     def ds(self):
         return self.data_source
+
+    def exe(self):
+        return self.ds.open(schema=self)
 
 
 #-------------------------------------------------------------
