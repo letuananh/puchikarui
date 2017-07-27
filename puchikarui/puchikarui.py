@@ -71,10 +71,12 @@ logger.setLevel(logging.WARNING)
 
 # A table schema
 class Table:
-    def __init__(self, name, columns, data_source=None):
+    def __init__(self, name, columns, data_source=None, proto=None, id_cols=None):
         self.name = name
         self.columns = columns
         self._data_source = data_source
+        self._proto = proto
+        self._id_cols = id_cols
         try:
             collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
         except Exception as ex:
@@ -86,16 +88,32 @@ class Table:
 
     def to_table(self, row_tuples, columns=None):
         if not row_tuples:
-            return None
+            raise ValueError("Invalid row_tuples")
         else:
+            if self._proto:
+                return [self.to_obj(x, columns) for x in row_tuples]
             if columns:
                 new_tuples = collections.namedtuple(self.name, columns, rename=True)
-                return [new_tuples(*x) for x in row_tuples]
+                return [self.to_row(x, new_tuples) for x in row_tuples]
             else:
-                return [self.template(*x) for x in row_tuples]
+                return [self.to_row(x) for x in row_tuples]
 
-    def to_row(self, row_tuple):
-        return self.template(*row_tuple)
+    def to_row(self, row_tuple, template=None):
+        if template:
+            return template(*row_tuple)
+        else:
+            return self.template(*row_tuple)
+
+    def to_obj(self, row_tuple, columns=None):
+        # fall back to row_tuple
+        if not self._proto:
+            return self.to_row(row_tuple)
+        # else create objects
+        if not columns:
+            columns = self.columns
+        new_obj = to_obj(self._proto, dict(zip(columns, row_tuple)), *columns)
+        # assign values
+        return new_obj
 
     def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, exe=None):
         ''' Select a single row
@@ -107,57 +125,51 @@ class Table:
             return None
 
     def select(self, where=None, values=None, orderby=None, limit=None, columns=None, exe=None):
-        if columns is not None:
-            query = "SELECT %s FROM %s " % (','.join(columns), self.name)
-        else:
-            query = "SELECT %s FROM %s " % (','.join(self.columns), self.name)
-        if where:
-            query += " WHERE " + where
-        if orderby:
-            query += " ORDER BY %s" % orderby
-        if limit:
-            query += " LIMIT %s" % limit
         if exe is not None:
-            return self.to_table(exe.execute(query, values))
+            return exe.select_record(self, where, values, orderby=orderby, limit=limit, columns=columns)
         else:
             with self._data_source.open() as exe:
-                result = exe.execute(query, values)
-                return self.to_table(result, columns)
+                return exe.select_record(self, where, values, orderby=orderby, limit=limit, columns=columns)
 
-    def insert(self, values, columns=None, exe=None):
-        ''' Insert an active record into DB and return lastrowid if available '''
-        if columns:
-            column_names = ','.join(columns)
-        elif len(values) < len(self.columns):
-            column_names = ','.join(self.columns[-len(values):])
-        else:
-            column_names = ','.join(self.columns)
-        query = "INSERT INTO %s (%s) VALUES (%s) " % (self.name, column_names, ','.join(['?'] * len(values)))
+    def insert(self, *values, columns=None, exe=None):
         if exe is not None:
-            exe.execute(query, values)
-            return exe.cur.lastrowid
+            return exe.insert_record(self, values=values, columns=columns)
         else:
             with self._data_source.open() as exe:
-                exe.execute(query, values)
-                return exe.cur.lastrowid
+                return exe.insert_record(self, values=values, columns=columns)
 
     def delete(self, where=None, values=None, exe=None):
-        if where:
-            query = "DELETE FROM {tbl} WHERE {where}".format(tbl=self.name, where=where)
-        else:
-            query = "DELETE FROM {tbl}".format(tbl=self.name)
-        logger.debug("Executing: {q} | values={v}".format(q=query, v=values))
-
         if exe is not None:
-            exe.execute(query, values)
+            return exe.delete_record(self, where=where, values=values)
         else:
             with self._data_source.open() as exe:
-                exe.execute(query, values)
+                return exe.delete_record(self, where=where, values=values)
+
+    def update(self, new_values, where='', where_values=None, columns=None, exe=None):
+        if exe is not None:
+            return exe.delete_record(self, new_values, where, where_values, columns)
+        else:
+            with self._data_source.open() as exe:
+                return exe.delete_record(self, new_values, where, where_values, columns)
+
+    def by_id(self, *args, columns=None, exe=None):
+        if exe is not None:
+            return exe.select_object_by_id(self, args, columns)
+        else:
+            with self._data_source.open() as exe:
+                return exe.select_object_by_id(self, args, columns)
+
+    def save(self, obj, columns=None, exe=None):
+        if exe is not None:
+            return TableContext(self, exe).save(obj, columns)
+        else:
+            with self._data_source.open() as exe:
+                return TableContext(self, exe).save(obj, columns)
 
 
 class DataSource:
 
-    def __init__(self, db_path, setup_script=None, setup_file=None, auto_commit=True):
+    def __init__(self, db_path, setup_script=None, setup_file=None, auto_commit=True, schema=None):
         self._filepath = db_path
         self._setup_script = setup_script
         self.auto_commit = auto_commit
@@ -167,13 +179,16 @@ class DataSource:
                 self._setup_file = scriptfile.read()
         else:
             self._setup_file = None
+        self.schema = schema
 
     @property
     def path(self):
         return self._filepath
 
-    def open(self, schema=None, auto_commit=None):
+    def open(self, auto_commit=None, schema=None):
         ''' Create a context to execute queries '''
+        if not schema:
+            schema = self.schema
         ac = auto_commit if auto_commit is not None else self.auto_commit
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
@@ -200,6 +215,127 @@ class DataSource:
             return exe.executefile(file_loc)
 
 
+# This was adopted from chirptext
+def update_data(source, target, *fields, **field_map):
+    source_dict = source.__dict__ if hasattr(source, '__dict__') else source
+    target_dict = target.__dict__ if hasattr(target, '__dict__') else target
+    if not fields:
+        fields = source_dict.keys()
+    for f in fields:
+        target_f = f if f not in field_map else field_map[f]
+        target_dict[target_f] = source_dict[f]
+
+
+def to_obj(cls, obj_data=None, *fields, **field_map):
+    ''' prioritize obj_dict when there are conficts '''
+    obj_dict = obj_data.__dict__ if hasattr(obj_data, '__dict__') else obj_data
+    if not fields:
+        fields = obj_dict.keys()
+    # obj_kwargs = {}
+    # for k in fields:
+    #     f = k if k not in field_map else field_map[k]
+    #     obj_kwargs[f] = obj_dict[k]
+    obj = cls()
+    update_data(obj_dict, obj, *fields, **field_map)
+    return obj
+
+
+class QueryBuilder(object):
+
+    ''' Default query builder '''
+    def __init__(self, schema):
+        self.schema = schema
+
+    def build_select(self, table, where=None, orderby=None, limit=None, columns=None):
+        query = []
+        if not columns:
+            columns = table.columns
+        query.append("SELECT ")
+        query.append(','.join(columns))
+        query.append(" FROM ")
+        query.append(table.name)
+        if where:
+            query.append(" WHERE ")
+            query.append(where)
+        if orderby:
+            query.append(" ORDER BY ")
+            query.append(orderby)
+        if limit:
+            query.append(" LIMIT ")
+            query.append(str(limit))
+        return ''.join(query)
+
+    def build_insert(self, table, values, columns=None):
+        ''' Insert an active record into DB and return lastrowid if available '''
+        if not columns:
+            columns = table.columns
+        if len(values) < len(columns):
+            column_names = ','.join(columns[-len(values):])
+        else:
+            column_names = ','.join(columns)
+        query = "INSERT INTO %s (%s) VALUES (%s) " % (table.name, column_names, ','.join(['?'] * len(values)))
+        return query
+
+    def build_update(self, table, where='', columns=None):
+        if columns is None:
+            columns = table.columns
+        set_fields = []
+        for col in columns:
+            set_fields.append("{c}=?".format(c=col))
+        if where:
+            query = 'UPDATE {t} SET {sf} WHERE {where}'.format(t=table.name, sf=', '.join(set_fields), where=where)
+        else:
+            query = 'UPDATE {t} SET {sf}'.format(t=table.name, sf=', '.join(set_fields))
+        return query
+
+    def build_delete(self, table, where=None):
+        if where:
+            query = "DELETE FROM {tbl} WHERE {where}".format(tbl=table.name, where=where)
+        else:
+            query = "DELETE FROM {tbl}".format(tbl=self.name)
+        return query
+
+
+class TableContext(object):
+    def __init__(self, table, context):
+        self._table = table
+        self._context = context
+
+    def select(self, where=None, values=None, **kwargs):
+        return self._context.select_record(self._table, where, values, **kwargs)
+
+    def select_single(self, where=None, values=None, **kwargs):
+        result = self._context.select_record(self._table, where, values, **kwargs)
+        if result and len(result) > 0:
+            return result[0]
+        else:
+            return None
+
+    def insert(self, *values, columns=None):
+        return self._context.insert_record(self._table, values, columns)
+
+    def update(self, new_values, where='', where_values=None, columns=None):
+        return self._context.update_record(self._table, new_values, where, where_values, columns)
+
+    def delete(self, where=None, values=None):
+        return self._context.delete_record(self._table, where, values)
+
+    def by_id(self, *args, columns=None):
+        return self._context.select_object_by_id(self._table, args, columns)
+
+    def save(self, obj, columns=None):
+        existed = True
+        for i in self._table._id_cols:
+            existed = existed and getattr(obj, i)
+            print(i, existed, getattr(obj, i))
+        if existed:
+            # update
+            self._context.update_object(self._table, obj, columns)
+        else:
+            # insert
+            self._context.insert_object(self._table, obj, columns)
+
+
 class ExecutionContext(object):
     ''' Create a context to work with a schema which closes connection when destroyed
     '''
@@ -217,12 +353,62 @@ class ExecutionContext(object):
             except Exception as e:
                 logging.exception("Cannot commit changes. e = %s" % e)
 
+    def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
+        ''' Support these keywords where, values, orderby, limit and columns'''
+        query = self.schema.query_builder.build_select(table, where, orderby, limit, columns)
+        return table.to_table(self.execute(query, values), columns=columns)
+
+    def insert_record(self, table, values, columns=None):
+        query = self.schema.query_builder.build_insert(table, values, columns)
+        self.execute(query, values)
+        return self.cur.lastrowid
+
+    def update_record(self, table, new_values, where='', where_values=None, columns=None):
+        query = self.schema.query_builder.build_update(table, where, columns)
+        return self.execute(query, new_values + where_values if where_values else new_values)
+
+    def delete_record(self, table, where=None, values=None):
+        query = self.schema.query_builder.build_delete(table, where)
+        logger.debug("Executing: {q} | values={v}".format(q=query, v=values))
+        return self.execute(query, values)
+
+    def select_object_by_id(self, table, ids, columns=None):
+        where = ' AND '.join(['{c}=?'.format(c=c) for c in table._id_cols])
+        results = self.select_record(table, where, ids, columns=columns)
+        if results:
+            return results[0]
+        else:
+            return None
+
+    def insert_object(self, table, obj_data, columns=None):
+        if not columns:
+            columns = table.columns
+        values = tuple(getattr(obj_data, colname) for colname in columns)
+        self.insert_record(table, values, columns)
+
+    def update_object(self, table, obj_data, columns=None):
+        where = ' AND '.join(['{c}=?'.format(c=c) for c in table._id_cols])
+        where_values = tuple(getattr(obj_data, colname) for colname in table._id_cols)
+        if not columns:
+            columns = table.columns
+        new_values = tuple(getattr(obj_data, colname) for colname in columns)
+        self.update_record(table, new_values, where, where_values, columns)
+
+    def delete_object(self, table, obj_data):
+        where = ' AND '.join(['{c}=?'.format(c=c) for c in table._id_cols])
+        where_values = tuple(getattr(obj_data, colname) for colname in table._id_cols)
+        self.delete_record(table, where, where_values)
+
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
-        if params:
-            return self.cur.execute(query, params)
-        else:
-            return self.cur.execute(query)
+        try:
+            if params:
+                return self.cur.execute(query, params)
+            else:
+                return self.cur.execute(query)
+        except:
+            logging.exception('Invalid query. q={}, p={}'.format(query, params))
+            raise
 
     def executescript(self, query):
         return self.cur.executescript(query)
@@ -247,7 +433,10 @@ class ExecutionContext(object):
         if not self.schema or name not in self.schema._tables:
             raise AttributeError('Attribute {} does not exist'.format(name))
         else:
-            return self.schema.table
+            tbl = getattr(self.schema, name)
+            ctx = TableContext(tbl, self)
+            setattr(self, name, ctx)
+            return getattr(self, name)
 
     def __enter__(self):
         return self
@@ -266,12 +455,13 @@ class Schema(object):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
-            self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file, auto_commit=auto_commit)
+            self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file, auto_commit=auto_commit, schema=self)
         self.auto_commit = auto_commit
         self._tables = {}
+        self.query_builder = QueryBuilder(self)
 
-    def add_table(self, name, columns, alias=None):
-        tbl_obj = Table(name, columns, self.data_source)
+    def add_table(self, name, columns, id_cols=None, proto=None, alias=None):
+        tbl_obj = Table(name, columns, self.data_source, id_cols=id_cols, proto=proto)
         setattr(self, name, tbl_obj)
         self._tables[name] = tbl_obj
         if alias:
@@ -282,7 +472,8 @@ class Schema(object):
     def ds(self):
         return self.data_source
 
-    def exe(self):
+    def ctx(self):
+        ''' Create a new execution context '''
         return self.ds.open(schema=self)
 
 

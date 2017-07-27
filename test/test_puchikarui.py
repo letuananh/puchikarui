@@ -61,16 +61,27 @@ from puchikarui import Schema
 
 TEST_DIR = os.path.dirname(__file__)
 SETUP_FILE = os.path.join(TEST_DIR, 'data', 'init_script.sql')
-SETUP_SCRIPT = "INSERT INTO person VALUES ('Chun', 78)"
+SETUP_SCRIPT = "INSERT INTO person (name, age) VALUES ('Chun', 78)"
 TEST_DB = os.path.join(TEST_DIR, 'data', 'test.db')
 
 
 ########################################################################
 
 class SchemaDemo(Schema):
-    def __init__(self, data_source, setup_script=None, setup_file=SETUP_FILE):
-        Schema.__init__(self, data_source, setup_script=setup_script, setup_file=setup_file)
-        self.add_table('person', ['name', 'age'])
+    def __init__(self, data_source=':memory:', setup_script=SETUP_SCRIPT, setup_file=SETUP_FILE):
+        Schema.__init__(self, data_source=data_source, setup_script=setup_script, setup_file=setup_file)
+        self.add_table('person', ['ID', 'name', 'age'], ('ID',), proto=Person)
+        self.add_table('hobby', ['pid', 'hobby'])
+
+
+class Person(object):
+    def __init__(self, name='', age=-1):
+        self.ID = None
+        self.name = name
+        self.age = age
+
+    def __str__(self):
+        return "#{}: {}/{}".format(self.ID, self.name, self.age)
 
 
 ########################################################################
@@ -86,15 +97,14 @@ class TestDemoLib(unittest.TestCase):
         print("Testing basic database actions")
         db = SchemaDemo(TEST_DB, setup_file=SETUP_FILE, setup_script=SETUP_SCRIPT)
         # We can excute SQLite script as usual ...
-        db.ds.execute("INSERT INTO person VALUES ('Chen', 15)")
+        db.ds.execute("INSERT INTO person (name, age) VALUES ('Chen', 15);")
         # Or use this ORM-like method
-        # It's not robust yet, just a simple util code block
         # Test insert
-        db.person.insert(['Morio', 29])
-        db.person.insert(['Kent', 42])
+        db.person.insert('Morio', 29)
+        db.person.insert('Kent', 42)
         # Test select data
         persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
-        expected = [('Ji', 28), ('Morio', 29), ('Ka', 32), ('Kent', 42), ('Chun', 78)]
+        expected = [('Ji', 28), ('Morio', 29), ('Ka', 32), ('Vi', 33), ('Kent', 42), ('Chun', 78)]
         actual = [(person.name, person.age) for person in persons]
         self.assertEqual(expected, actual)
         # Test select single
@@ -105,6 +115,75 @@ class TestDemoLib(unittest.TestCase):
         db.person.delete(where='age > ?', values=(70,))
         chun = db.person.select_single('name=?', ('Chun',))
         self.assertIsNone(chun)
+
+    def test_exe(self):
+        db = SchemaDemo(":memory:")
+        with db.ctx() as ctx:
+            # test select
+            ppl = ctx.person.select()
+            self.assertEqual(len(ppl), 6)
+            # test insert
+            ctx.person.insert('Totoro', columns=('name',))  # insert partial data
+            ctx.person.insert('Shizuka', 10)  # full record
+            p = ctx.person.select_single(where='name=?', values=('Dunno',))
+            self.assertIsNone(p)
+            # Test update data & select single
+            ctx.person.update((10,), "name=?", ("Totoro",), columns=('age',))
+            totoro = ctx.person.select_single(where='name=?', values=('Totoro',))
+            self.assertEqual(totoro.age, 10)
+            # test updated
+            ppl = ctx.person.select()
+            self.assertEqual(len(ppl), 8)
+            # test delete
+            ctx.person.delete('age > ?', (70,))
+            ppl = ctx.person.select()
+            # done!
+            expected = [(1, 'Ji', 28), (2, 'Zen', 25), (3, 'Ka', 32), (4, 'Anh', 15), (5, 'Vi', 33), (7, 'Totoro', 10), (8, 'Shizuka', 10)]
+            actual = [(person.ID, person.name, person.age) for person in ppl]
+            self.assertEqual(expected, actual)
+
+    def test_selective_select(self):
+        db = SchemaDemo()  # create a new DB in RAM
+        pers = db.person.select(columns=('name',))
+        names = [x.name for x in pers]
+        self.assertEqual(names, ['Ji', 'Zen', 'Ka', 'Anh', 'Vi', 'Chun'])
+
+    def test_persistent(self):
+        db = SchemaDemo(TEST_DB)
+        db.person.save(Person('Buu', 1000))
+        ppl = db.person.select()
+        for p in ppl:
+            print(p)
+        buu = db.person.select_single('name=?', ('Buu',))
+        self.assertIsNotNone(buu)
+
+    def test_orm(self):
+        db = SchemaDemo()  # create a new DB in RAM
+        with db.ctx() as ctx:
+            p = ctx.person.select_single('name=?', ('Anh',))
+            # There is no prototype class for hobby, so a namedtuple will be generated
+            hobbies = ctx.hobby.select('pid=?', (p.ID,))
+            self.assertIsInstance(p, Person)
+            self.assertIsInstance(hobbies[0], tuple)
+            self.assertEqual(hobbies[0].hobby, 'coding')
+            # insert hobby
+            ctx.hobby.insert(p.ID, 'reading')
+            hobbies = [x.hobby for x in ctx.hobby.select('pid=?', (p.ID,), columns=('hobby',))]
+            self.assertEqual(hobbies, ['coding', 'reading'])
+            # now only select the name and not the age
+            p2 = ctx.person.select_single('name=?', ('Vi',), columns=('ID', 'name',))
+            self.assertEqual(p2.name, 'Vi')
+            self.assertEqual(p2.age, -1)
+            # test updating object
+            p2.name = 'Vee'
+            ctx.update_object(db.person, p2, ('name',))
+            p2.age = 29
+            ctx.update_object(db.person, p2)
+            # ensure that data was updated
+            p2n = ctx.person.by_id(p2.ID)
+            self.assertEqual(p2n.name, 'Vee')
+            self.assertEqual(p2n.age, 29)
+            self.assertEqual(p2n.ID, p2.ID)
 
 
 ########################################################################
