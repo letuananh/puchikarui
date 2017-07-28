@@ -80,7 +80,7 @@ class Table:
         try:
             collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
         except Exception as ex:
-            print("WARNING: Bad database design detected (Table: %s (%s)" % (name, columns))
+            logger.warning("WARNING: Bad database design detected (Table: %s (%s)" % (name, columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
 
     def __str__(self):
@@ -131,40 +131,50 @@ class Table:
             with self._data_source.open() as exe:
                 return exe.select_record(self, where, values, orderby=orderby, limit=limit, columns=columns)
 
+    def ctx(self, exe):
+        return TableContext(self, exe)
+
     def insert(self, *values, columns=None, exe=None):
         if exe is not None:
-            return exe.insert_record(self, values=values, columns=columns)
+            return self.ctx(exe).insert(*values, columns=columns)
         else:
             with self._data_source.open() as exe:
-                return exe.insert_record(self, values=values, columns=columns)
+                return self.ctx(exe).insert(*values, columns=columns)
 
     def delete(self, where=None, values=None, exe=None):
         if exe is not None:
-            return exe.delete_record(self, where=where, values=values)
+            return self.ctx(exe).delete(where=where, values=values)
         else:
             with self._data_source.open() as exe:
-                return exe.delete_record(self, where=where, values=values)
+                return self.ctx(exe).delete(where=where, values=values)
+
+    def delete_obj(self, obj, exe=None):
+        if exe is not None:
+            return self.ctx(exe).delete_obj(obj)
+        else:
+            with self._data_source.open() as exe:
+                return self.ctx(exe).delete_obj()
 
     def update(self, new_values, where='', where_values=None, columns=None, exe=None):
         if exe is not None:
-            return exe.delete_record(self, new_values, where, where_values, columns)
+            return self.ctx(exe).update(new_values, where, where_values, columns)
         else:
             with self._data_source.open() as exe:
-                return exe.delete_record(self, new_values, where, where_values, columns)
+                return self.ctx(exe).update(new_values, where, where_values, columns)
 
     def by_id(self, *args, columns=None, exe=None):
         if exe is not None:
-            return exe.select_object_by_id(self, args, columns)
+            return self.ctx(exe).by_id(*args, columns=columns)
         else:
             with self._data_source.open() as exe:
-                return exe.select_object_by_id(self, args, columns)
+                return self.ctx(exe).by_id(*args, columns=columns)
 
     def save(self, obj, columns=None, exe=None):
         if exe is not None:
-            return TableContext(self, exe).save(obj, columns)
+            return self.ctx(exe).save(obj, columns)
         else:
             with self._data_source.open() as exe:
-                return TableContext(self, exe).save(obj, columns)
+                return self.ctx(exe).save(obj, columns)
 
 
 class DataSource:
@@ -327,13 +337,15 @@ class TableContext(object):
         existed = True
         for i in self._table._id_cols:
             existed = existed and getattr(obj, i)
-            print(i, existed, getattr(obj, i))
         if existed:
             # update
-            self._context.update_object(self._table, obj, columns)
+            return self._context.update_object(self._table, obj, columns)
         else:
             # insert
-            self._context.insert_object(self._table, obj, columns)
+            return self._context.insert_object(self._table, obj, columns)
+
+    def delete_obj(self, obj):
+        return self._context.delete_object(self._table, obj)
 
 
 class ExecutionContext(object):
@@ -351,7 +363,7 @@ class ExecutionContext(object):
             try:
                 self.conn.commit()
             except Exception as e:
-                logging.exception("Cannot commit changes. e = %s" % e)
+                logger.exception("Cannot commit changes. e = %s" % e)
 
     def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         ''' Support these keywords where, values, orderby, limit and columns'''
@@ -385,6 +397,7 @@ class ExecutionContext(object):
             columns = table.columns
         values = tuple(getattr(obj_data, colname) for colname in columns)
         self.insert_record(table, values, columns)
+        return self.cur.lastrowid
 
     def update_object(self, table, obj_data, columns=None):
         where = ' AND '.join(['{c}=?'.format(c=c) for c in table._id_cols])
@@ -407,7 +420,7 @@ class ExecutionContext(object):
             else:
                 return self.cur.execute(query)
         except:
-            logging.exception('Invalid query. q={}, p={}'.format(query, params))
+            logger.exception('Invalid query. q={}, p={}'.format(query, params))
             raise
 
     def executescript(self, query):
@@ -425,7 +438,7 @@ class ExecutionContext(object):
                     self.commit()
                 self.conn.close()
         except:
-            logging.exception("Error while closing connection")
+            logger.exception("Error while closing connection")
         finally:
             self.conn = None
 

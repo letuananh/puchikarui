@@ -63,6 +63,8 @@ TEST_DIR = os.path.dirname(__file__)
 SETUP_FILE = os.path.join(TEST_DIR, 'data', 'init_script.sql')
 SETUP_SCRIPT = "INSERT INTO person (name, age) VALUES ('Chun', 78)"
 TEST_DB = os.path.join(TEST_DIR, 'data', 'test.db')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 ########################################################################
@@ -88,9 +90,11 @@ class Person(object):
 
 class TestDemoLib(unittest.TestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
+        print("Setting up tests ...")
         if os.path.isfile(TEST_DB):
-            logging.debug("Test DB exists, removing it now")
+            logger.info("Test DB exists, removing it now")
             os.unlink(TEST_DB)
 
     def test_basic(self):
@@ -100,11 +104,10 @@ class TestDemoLib(unittest.TestCase):
         db.ds.execute("INSERT INTO person (name, age) VALUES ('Chen', 15);")
         # Or use this ORM-like method
         # Test insert
-        db.person.insert('Morio', 29)
         db.person.insert('Kent', 42)
         # Test select data
         persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
-        expected = [('Ji', 28), ('Morio', 29), ('Ka', 32), ('Vi', 33), ('Kent', 42), ('Chun', 78)]
+        expected = [('Ji', 28), ('Ka', 32), ('Vi', 33), ('Kent', 42), ('Chun', 78)]
         actual = [(person.name, person.age) for person in persons]
         self.assertEqual(expected, actual)
         # Test select single
@@ -116,7 +119,7 @@ class TestDemoLib(unittest.TestCase):
         chun = db.person.select_single('name=?', ('Chun',))
         self.assertIsNone(chun)
 
-    def test_exe(self):
+    def test_execution_context(self):
         db = SchemaDemo(":memory:")
         with db.ctx() as ctx:
             # test select
@@ -148,16 +151,23 @@ class TestDemoLib(unittest.TestCase):
         names = [x.name for x in pers]
         self.assertEqual(names, ['Ji', 'Zen', 'Ka', 'Anh', 'Vi', 'Chun'])
 
-    def test_persistent(self):
+    def test_orm_persistent(self):
         db = SchemaDemo(TEST_DB)
-        db.person.save(Person('Buu', 1000))
-        ppl = db.person.select()
-        for p in ppl:
-            print(p)
-        buu = db.person.select_single('name=?', ('Buu',))
+        bid = db.person.save(Person('Buu', 1000))
+        buu = db.person.by_id(bid)
         self.assertIsNotNone(buu)
+        self.assertEqual(buu.name, 'Buu')
+        # insert more stuff
+        db.hobby.insert(buu.ID, 'candies')
+        db.hobby.insert(buu.ID, 'chocolate')
+        db.hobby.insert(buu.ID, 'santa')
+        hobbies = db.hobby.select('pid=?', (buu.ID,))
+        self.assertEqual({x.hobby for x in hobbies}, {'candies', 'chocolate', 'santa'})
+        db.hobby.delete('hobby=?', ('chocolate',))
+        hobbies = db.hobby.select('pid=?', (buu.ID,))
+        self.assertEqual({x.hobby for x in hobbies}, {'candies', 'santa'})
 
-    def test_orm(self):
+    def test_orm_with_context(self):
         db = SchemaDemo()  # create a new DB in RAM
         with db.ctx() as ctx:
             p = ctx.person.select_single('name=?', ('Anh',))

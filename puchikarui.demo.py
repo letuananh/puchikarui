@@ -23,31 +23,56 @@
 
 from puchikarui import Schema
 
+#----------------------------------------------------------------------
+# CONFIGURATION
+#----------------------------------------------------------------------
+
+SETUP_FILE = './test/data/init_script.sql'
+TEST_DB = './test/data/demo.db'
+
+
+#----------------------------------------------------------------------
+# DATA STRUCTURES
+#----------------------------------------------------------------------
+
+class Person(object):
+    def __init__(self, name='', age=-1):
+        self.ID = None
+        self.name = name
+        self.age = age
+
+    def __str__(self):
+        return "#{}: {}/{}".format(self.ID, self.name, self.age)
+
 
 class SchemaDemo(Schema):
-    def __init__(self, data_source):
-        Schema.__init__(self, data_source)
-        self.add_table('person', ['name', 'age'])
+    def __init__(self, data_source, setup_file=SETUP_FILE):
+        Schema.__init__(self, data_source, setup_file=setup_file)
+        self.add_table('person', ['ID', 'name', 'age'], ('ID',), proto=Person)
+        self.add_table('hobby', ['pid', 'hobby'])
 
+
+#----------------------------------------------------------------------
+# MAIN
+#----------------------------------------------------------------------
 
 def main():
-    db = SchemaDemo('./puchikarui.test.db')
-    # We can excute SQLite script as usual ...
-    db.ds.executescript(''' DROP TABLE IF EXISTS person;
-    CREATE TABLE person(name, age);
-    INSERT INTO person
-    VALUES ('Ji', 28)
-    ,('Zen', 25)
-    ,('Ka', 32)''')
-    # Or use this ORM-like method
-    # It's not robust yet, just a simple util code block
-    db.person.insert(['Morio', 29])
-    db.person.insert(['Kent', 42])
-    persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
-
+    db = SchemaDemo(TEST_DB)
+    goku = db.person.select_single('name=?', ('Goku',))
+    if not goku:
+        db.person.insert('Goku', 20)
+    buu = db.person.select_single('name=?', ('Buu',))
+    if not buu:
+        db.person.save(Person('Buu', 1000))
+    # test select
+    persons = db.person.select(orderby='age')
     print("There are {} people.".format(len(persons)))
     for person in persons:
         print("%s is %d years old." % (person.name, person.age))
+    # update data
+    buu.age += 1
+    db.person.save(buu)
+    print("Buu aged now => {}".format(db.person.by_id(buu.ID)))
 
 
 if __name__ == "__main__":
