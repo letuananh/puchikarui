@@ -72,8 +72,24 @@ logger.setLevel(logging.INFO)
 class SchemaDemo(Schema):
     def __init__(self, data_source=':memory:', setup_script=SETUP_SCRIPT, setup_file=SETUP_FILE):
         Schema.__init__(self, data_source=data_source, setup_script=setup_script, setup_file=setup_file)
-        self.add_table('person', ['ID', 'name', 'age'], ('ID',), proto=Person)
-        self.add_table('hobby', ['pid', 'hobby'])
+        self.add_table('person', ['ID', 'name', 'age'], proto=Person, id_cols=('ID',))
+        self.add_table('hobby').add_fields('pid', 'hobby')
+        self.add_table('diary', ['ID', 'pid', 'text'], proto=Diary).set_id('ID').field_map(pid='ownerID', text='content')
+
+
+class Diary(object):
+
+    def __init__(self, content=''):
+        """
+
+        """
+        self.ID = None
+        self.owner = None
+        self.ownerID = None
+        self.content = content
+
+    def __str__(self):
+        return "{per} wrote `{txt}`".format(per=self.owner.name, txt=self.content)
 
 
 class Person(object):
@@ -194,6 +210,16 @@ class TestDemoLib(unittest.TestCase):
             self.assertEqual(p2n.name, 'Vee')
             self.assertEqual(p2n.age, 29)
             self.assertEqual(p2n.ID, p2.ID)
+
+    def test_field_mapping(self):
+        db = SchemaDemo()
+        with db.ctx() as ctx:
+            vi = ctx.person.select_single('name=?', ('Vi',))
+            ctx.diary.insert(vi.ID, 'I am NOT better than Emacs')
+            diaries = ctx.diary.select('pid=?', (vi.ID,))
+            for d in diaries:
+                d.owner = ctx.person.by_id(d.ownerID)
+                print(d)
 
 
 ########################################################################

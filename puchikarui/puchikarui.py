@@ -71,17 +71,35 @@ logger.setLevel(logging.WARNING)
 
 # A table schema
 class Table:
-    def __init__(self, name, columns, data_source=None, proto=None, id_cols=None):
+    def __init__(self, name, *columns, data_source=None, proto=None, id_cols=('rowid',), **field_map):
         self.name = name
-        self.columns = columns
+        self.columns = []
+        self.add_fields(*columns)
         self._data_source = data_source
         self._proto = proto
-        self._id_cols = id_cols
+        self._id_cols = id_cols if id_cols else []
+        self._field_map = field_map
+
+    def add_fields(self, *columns):
+        self.columns.extend(columns)
         try:
             collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
         except Exception as ex:
-            logger.warning("WARNING: Bad database design detected (Table: %s (%s)" % (name, columns))
+            logger.warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
+        return self
+
+    def set_id(self, *id_cols):
+        self._id_cols.extend(id_cols)
+        return self
+
+    def set_proto(self, proto):
+        self._proto = proto
+        return self
+
+    def field_map(self, **field_map):
+        self._field_map.update(field_map)
+        return self
 
     def __str__(self):
         return "Table: %s - Cols: %s" % (self.name, self.columns)
@@ -111,7 +129,7 @@ class Table:
         # else create objects
         if not columns:
             columns = self.columns
-        new_obj = to_obj(self._proto, dict(zip(columns, row_tuple)), *columns)
+        new_obj = to_obj(self._proto, dict(zip(columns, row_tuple)), *columns, **self._field_map)
         # assign values
         return new_obj
 
@@ -473,13 +491,16 @@ class Schema(object):
         self._tables = {}
         self.query_builder = QueryBuilder(self)
 
-    def add_table(self, name, columns, id_cols=None, proto=None, alias=None):
-        tbl_obj = Table(name, columns, self.data_source, id_cols=id_cols, proto=proto)
+    def add_table(self, name, columns=None, proto=None, id_cols=None, alias=None, **field_map):
+        if not columns:
+            columns = []
+        tbl_obj = Table(name, *columns, data_source=self.data_source, proto=proto, id_cols=id_cols, **field_map)
         setattr(self, name, tbl_obj)
         self._tables[name] = tbl_obj
         if alias:
             setattr(self, alias, tbl_obj)
             self._tables[alias] = tbl_obj
+        return tbl_obj
 
     @property
     def ds(self):
