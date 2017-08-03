@@ -89,6 +89,10 @@ class Table:
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
         return self
 
+    @property
+    def id_cols(self):
+        return self._id_cols
+    
     def set_id(self, *id_cols):
         self._id_cols.extend(id_cols)
         return self
@@ -133,66 +137,64 @@ class Table:
         # assign values
         return new_obj
 
-    def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, exe=None):
-        ''' Select a single row
-        '''
-        result = self.select(where, values, orderby, limit, columns, exe)
-        if result and len(result) > 0:
-            return result[0]
+    def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
         else:
-            return None
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
 
-    def select(self, where=None, values=None, orderby=None, limit=None, columns=None, exe=None):
-        if exe is not None:
-            return exe.select_record(self, where, values, orderby=orderby, limit=limit, columns=columns)
+    def select(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).select(where, values, orderby=orderby, limit=limit, columns=columns)
         else:
-            with self._data_source.open() as exe:
-                return exe.select_record(self, where, values, orderby=orderby, limit=limit, columns=columns)
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).select(where, values, orderby=orderby, limit=limit, columns=columns)
 
-    def ctx(self, exe):
-        return TableContext(self, exe)
+    def ctx(self, ctx):
+        return TableContext(self, ctx)
 
-    def insert(self, *values, columns=None, exe=None):
-        if exe is not None:
-            return self.ctx(exe).insert(*values, columns=columns)
+    def insert(self, *values, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).insert(*values, columns=columns)
         else:
-            with self._data_source.open() as exe:
-                return self.ctx(exe).insert(*values, columns=columns)
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).insert(*values, columns=columns)
 
-    def delete(self, where=None, values=None, exe=None):
-        if exe is not None:
-            return self.ctx(exe).delete(where=where, values=values)
+    def delete(self, where=None, values=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).delete(where=where, values=values)
         else:
-            with self._data_source.open() as exe:
-                return self.ctx(exe).delete(where=where, values=values)
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).delete(where=where, values=values)
 
-    def delete_obj(self, obj, exe=None):
-        if exe is not None:
-            return self.ctx(exe).delete_obj(obj)
+    def delete_obj(self, obj, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).delete_obj(obj)
         else:
-            with self._data_source.open() as exe:
-                return self.ctx(exe).delete_obj()
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).delete_obj()
 
-    def update(self, new_values, where='', where_values=None, columns=None, exe=None):
-        if exe is not None:
-            return self.ctx(exe).update(new_values, where, where_values, columns)
+    def update(self, new_values, where='', where_values=None, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).update(new_values, where, where_values, columns)
         else:
-            with self._data_source.open() as exe:
-                return self.ctx(exe).update(new_values, where, where_values, columns)
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).update(new_values, where, where_values, columns)
 
-    def by_id(self, *args, columns=None, exe=None):
-        if exe is not None:
-            return self.ctx(exe).by_id(*args, columns=columns)
+    def by_id(self, *args, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).by_id(*args, columns=columns)
         else:
-            with self._data_source.open() as exe:
-                return self.ctx(exe).by_id(*args, columns=columns)
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).by_id(*args, columns=columns)
 
-    def save(self, obj, columns=None, exe=None):
-        if exe is not None:
-            return self.ctx(exe).save(obj, columns)
+    def save(self, obj, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).save(obj, columns)
         else:
-            with self._data_source.open() as exe:
-                return self.ctx(exe).save(obj, columns)
+            with self._data_source.open() as ctx:
+                return self.ctx(ctx).save(obj, columns)
 
 
 class DataSource:
@@ -228,6 +230,18 @@ class DataSource:
             if self._setup_script is not None:
                 exe.cur.executescript(self._setup_script)
         return exe
+
+    def select(self, query, params=None):
+        with self.open() as exe:
+            return exe.select(query, params)
+
+    def select_single(self, query, params=None):
+        with self.open() as exe:
+            return exe.select_single(query, params)
+
+    def select_scalar(self, query, params=None):
+        with self.open() as exe:
+            return exe.select_scalar(query, params)
 
     # Helper functions
     def execute(self, query, params=None):
@@ -352,15 +366,15 @@ class TableContext(object):
         return self._context.select_object_by_id(self._table, args, columns)
 
     def save(self, obj, columns=None):
-        existed = True
-        for i in self._table._id_cols:
+        existed = True and len(self._table.id_cols) > 0
+        for i in self._table.id_cols:
             existed = existed and getattr(obj, i)
         if existed:
             # update
-            return self._context.update_object(self._table, obj, columns)
+            return self._context.update_object(self._table, obj, columns, self._table._field_map)
         else:
             # insert
-            return self._context.insert_object(self._table, obj, columns)
+            return self._context.insert_object(self._table, obj, columns, self._table._field_map)
 
     def delete_obj(self, obj):
         return self._context.delete_object(self._table, obj)
@@ -375,6 +389,13 @@ class ExecutionContext(object):
         self.cur = self.conn.cursor()
         self.schema = schema
         self.auto_commit = auto_commit
+
+    def buckmode(self):
+        self.cur.execute("PRAGMA cache_size=80000000")
+        self.cur.execute("PRAGMA journal_mode=MEMORY")
+        self.cur.execute("PRAGMA temp_store=MEMORY")
+        # self.cur.execute("PRAGMA count_changes=OFF")
+        return self
 
     def commit(self):
         if self.conn:
@@ -410,19 +431,19 @@ class ExecutionContext(object):
         else:
             return None
 
-    def insert_object(self, table, obj_data, columns=None):
+    def insert_object(self, table, obj_data, columns=None, field_map=None):
         if not columns:
             columns = table.columns
-        values = tuple(getattr(obj_data, colname) for colname in columns)
+        values = tuple(getattr(obj_data, field_map[colname] if field_map and colname in field_map else colname) for colname in columns)
         self.insert_record(table, values, columns)
         return self.cur.lastrowid
 
-    def update_object(self, table, obj_data, columns=None):
+    def update_object(self, table, obj_data, columns=None, field_map=None):
         where = ' AND '.join(['{c}=?'.format(c=c) for c in table._id_cols])
         where_values = tuple(getattr(obj_data, colname) for colname in table._id_cols)
         if not columns:
             columns = table.columns
-        new_values = tuple(getattr(obj_data, colname) for colname in columns)
+        new_values = tuple(getattr(obj_data, field_map[colname] if field_map and colname in field_map else colname) for colname in columns)
         self.update_record(table, new_values, where, where_values, columns)
 
     def delete_object(self, table, obj_data):
@@ -430,9 +451,19 @@ class ExecutionContext(object):
         where_values = tuple(getattr(obj_data, colname) for colname in table._id_cols)
         self.delete_record(table, where, where_values)
 
+    def select(self, query, params=None):
+        return self.execute(query, params).fetchall()
+
+    def select_single(self, query, params=None):
+        return self.execute(query, params).fetchone()
+
+    def select_scalar(self, query, params=None):
+        return self.select_single(query, params)[0]
+
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         try:
+            logger.debug('Executing q={} | p={}'.format(query, params))
             if params:
                 return self.cur.execute(query, params)
             else:

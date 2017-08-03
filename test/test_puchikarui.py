@@ -79,17 +79,21 @@ class SchemaDemo(Schema):
 
 class Diary(object):
 
-    def __init__(self, content=''):
+    def __init__(self, content='', owner=None):
         """
 
         """
         self.ID = None
-        self.owner = None
-        self.ownerID = None
+        if owner:
+            self.owner = owner
+            self.ownerID = owner.ID
+        else:
+            self.owner = None
+            self.ownerID = None
         self.content = content
 
     def __str__(self):
-        return "{per} wrote `{txt}`".format(per=self.owner.name, txt=self.content)
+        return "{per} wrote `{txt}`".format(per=self.owner.name if self.owner else '#{}'.format(self.ownerID), txt=self.content)
 
 
 class Person(object):
@@ -112,6 +116,15 @@ class TestDemoLib(unittest.TestCase):
         if os.path.isfile(TEST_DB):
             logger.info("Test DB exists, removing it now")
             os.unlink(TEST_DB)
+
+    def test_sqlite_methods(self):
+        db = SchemaDemo()
+        num = db.ds.select_scalar('SELECT 2')
+        self.assertEqual(num, 2)
+        nums = db.ds.select_single('SELECT 2, 3, 4')
+        self.assertEqual(tuple(nums), (2, 3, 4))
+        matrix = db.ds.select('SELECT 1, 2, 3 UNION SELECT 4, 5, 6')
+        self.assertEqual(tuple(tuple(row) for row in matrix), ((1, 2, 3), (4, 5, 6)))
 
     def test_basic(self):
         print("Testing basic database actions")
@@ -212,14 +225,23 @@ class TestDemoLib(unittest.TestCase):
             self.assertEqual(p2n.ID, p2.ID)
 
     def test_field_mapping(self):
+        content = 'I am better than Emacs'
+        new_content = 'I am NOT better than Emacs'
         db = SchemaDemo()
         with db.ctx() as ctx:
             vi = ctx.person.select_single('name=?', ('Vi',))
-            ctx.diary.insert(vi.ID, 'I am NOT better than Emacs')
+            diary = Diary(content, owner=vi)
+            ctx.diary.save(diary)
             diaries = ctx.diary.select('pid=?', (vi.ID,))
             for d in diaries:
                 d.owner = ctx.person.by_id(d.ownerID)
                 print(d)
+                # test update
+                d.content = new_content
+                ctx.diary.save(d)
+            diary = ctx.diary.by_id(d.ID)
+            self.assertEqual(diary.content, new_content)
+            print(diary)
 
 
 ########################################################################
