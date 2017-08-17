@@ -59,8 +59,9 @@ from puchikarui import Schema
 # Configuration
 #----------------------------------------------------------------------
 
-TEST_DIR = os.path.dirname(__file__)
-SETUP_FILE = os.path.join(TEST_DIR, 'data', 'init_script.sql')
+TEST_DIR = os.path.abspath(os.path.dirname(__file__))
+TEST_DATA = os.path.join(TEST_DIR, 'data')
+SETUP_FILE = os.path.join(TEST_DATA, 'init_script.sql')
 SETUP_SCRIPT = "INSERT INTO person (name, age) VALUES ('Chun', 78)"
 TEST_DB = os.path.join(TEST_DIR, 'data', 'test.db')
 logger = logging.getLogger(__name__)
@@ -242,6 +243,70 @@ class TestDemoLib(unittest.TestCase):
             diary = ctx.diary.by_id(d.ID)
             self.assertEqual(diary.content, new_content)
             print(diary)
+
+
+class SchemaA(Schema):
+
+    SETUP_FILE = os.path.join(TEST_DATA, 'schemaA.sql')
+
+    def __init__(self, data_source=':memory:', setup_script=None, setup_file=None):
+        super().__init__(data_source=data_source, setup_script=setup_script, setup_file=setup_file)
+        # setup scripts & files
+        self.add_file(SchemaA.SETUP_FILE)
+        self.add_script("INSERT INTO person (name, age) VALUES ('potter', 10)")
+        # Table definitions
+        self.add_table('person', ['ID', 'name', 'age'], proto=Person, id_cols=('ID',))
+
+
+class SchemaB(Schema):
+
+    SETUP_FILE = os.path.join(TEST_DATA, 'schemaB.sql')
+
+    def __init__(self, data_source=':memory:', setup_script=None, setup_file=None):
+        super().__init__(data_source=data_source, setup_script=setup_script, setup_file=setup_file)
+        # setup scripts & files
+        self.add_file(SchemaB.SETUP_FILE)
+        self.add_script("INSERT INTO hobby (name) VALUES ('magic')")
+        # Table definitions
+        self.add_table('hobby', ['ID', 'name'], proto=Hobby, id_cols=('ID',))
+        self.add_table("person_hobby", ["hid", "pid"])
+
+
+class Hobby(object):
+
+    def __init__(self, name=None):
+        self.name = name
+
+    def __repr__(self):
+        return "Hobby: {}".format(self.name)
+
+
+class SchemaAB(SchemaB, SchemaA):
+
+    ''' Execution order: setup_files > setup_scripts
+        Schema's file > SchemaA's file > SchemaB's file >
+        Schema's script > SchemaA's script > SchemaB's script
+        Note: The first class in inheritance list will be executed last
+    '''
+
+    def __init__(self, data_source=":memory:", setup_script=None, setup_file=None):
+        super().__init__(data_source=data_source, setup_script=setup_script, setup_file=setup_file)
+        self.add_script('''INSERT INTO person_hobby VALUES ((SELECT ID FROM hobby WHERE name='magic'), (SELECT ID FROM person WHERE name='potter'));''')
+
+
+class TestMultipleSchema(unittest.TestCase):
+
+    def test_ms(self):
+        db = SchemaAB()
+        with db.ctx() as ctx:
+            potter = ctx.person.select_single()
+            magic = ctx.hobby.select_single()
+            link = ctx.person_hobby.select_single()
+            self.assertEqual(potter.name, 'potter')
+            self.assertEqual(magic.name, 'magic')
+            self.assertEqual(link.hid, magic.ID)
+            self.assertEqual(link.pid, potter.ID)
+        pass
 
 
 ########################################################################

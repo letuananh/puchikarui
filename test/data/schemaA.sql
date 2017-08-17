@@ -1,0 +1,5 @@
+CREATE TABLE person (
+       ID INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT,
+       age INTEGER
+);

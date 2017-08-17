@@ -92,7 +92,7 @@ class Table:
     @property
     def id_cols(self):
         return self._id_cols
-    
+
     def set_id(self, *id_cols):
         self._id_cols.extend(id_cols)
         return self
@@ -199,36 +199,39 @@ class Table:
 
 class DataSource:
 
-    def __init__(self, db_path, setup_script=None, setup_file=None, auto_commit=True, schema=None):
+    def __init__(self, db_path, schema=None):
         self._filepath = db_path
-        self._setup_script = setup_script
-        self.auto_commit = auto_commit
-        if setup_file is not None:
-            with open(setup_file, 'r') as scriptfile:
-                logger.debug("Setup script file provided: {}".format(setup_file))
-                self._setup_file = scriptfile.read()
-        else:
-            self._setup_file = None
+        self._script_file_map = {}
         self.schema = schema
 
     @property
     def path(self):
         return self._filepath
 
+    def read_file(self, path):
+        if path not in self._script_file_map:
+            with open(path, 'r') as script_file:
+                self._script_file_map[path] = script_file.read()
+        return self._script_file_map[path]
+
     def open(self, auto_commit=None, schema=None):
         ''' Create a context to execute queries '''
-        if not schema:
+        if schema is None:
             schema = self.schema
-        ac = auto_commit if auto_commit is not None else self.auto_commit
+        ac = auto_commit if auto_commit is not None else schema.auto_commit
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
         if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
             logger.warning("DB does not exist. Setup is required.")
-            # run setup script
-            if self._setup_file is not None:
-                exe.cur.executescript(self._setup_file)
-            if self._setup_script is not None:
-                exe.cur.executescript(self._setup_script)
+            # run setup files
+            if schema is not None and schema.setup_files:
+                for file_path in schema.setup_files:
+                    logger.debug("Executing script file: {}".format(file_path))
+                    exe.cur.executescript(self.read_file(file_path))
+            # run setup scripts
+            if schema.setup_scripts:
+                for script in schema.setup_scripts:
+                    exe.cur.executescript(script)
         return exe
 
     def select(self, query, params=None):
@@ -517,10 +520,24 @@ class Schema(object):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
-            self.data_source = DataSource(data_source, setup_script=setup_script, setup_file=setup_file, auto_commit=auto_commit, schema=self)
+            self.data_source = DataSource(data_source, schema=self)
         self.auto_commit = auto_commit
+        self.setup_files = []
+        if setup_file:
+            self.setup_files.append(setup_file)
+        self.setup_scripts = []
+        if setup_script:
+            self.setup_scripts.append(setup_script)
         self._tables = {}
         self.query_builder = QueryBuilder(self)
+
+    def add_file(self, setup_file):
+        self.setup_files.append(setup_file)
+        return self
+
+    def add_script(self, setup_script):
+        self.setup_scripts.append(setup_script)
+        return self
 
     def add_table(self, name, columns=None, proto=None, id_cols=None, alias=None, **field_map):
         if not columns:
