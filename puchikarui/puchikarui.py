@@ -260,15 +260,13 @@ class DataSource:
             return exe.executefile(file_loc)
 
 
-# This was adopted from chirptext
-def update_data(source, target, *fields, **field_map):
+def update_obj(source, target, *fields, **field_map):
     source_dict = source.__dict__ if hasattr(source, '__dict__') else source
-    target_dict = target.__dict__ if hasattr(target, '__dict__') else target
     if not fields:
         fields = source_dict.keys()
     for f in fields:
         target_f = f if f not in field_map else field_map[f]
-        target_dict[target_f] = source_dict[f]
+        setattr(target, target_f, source_dict[f])
 
 
 def to_obj(cls, obj_data=None, *fields, **field_map):
@@ -276,12 +274,8 @@ def to_obj(cls, obj_data=None, *fields, **field_map):
     obj_dict = obj_data.__dict__ if hasattr(obj_data, '__dict__') else obj_data
     if not fields:
         fields = obj_dict.keys()
-    # obj_kwargs = {}
-    # for k in fields:
-    #     f = k if k not in field_map else field_map[k]
-    #     obj_kwargs[f] = obj_dict[k]
     obj = cls()
-    update_data(obj_dict, obj, *fields, **field_map)
+    update_obj(obj_dict, obj, *fields, **field_map)
     return obj
 
 
