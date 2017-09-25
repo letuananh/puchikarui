@@ -53,11 +53,11 @@ __status__ = "Prototype"
 import os
 import unittest
 import logging
-from puchikarui import Schema
+from puchikarui import Schema, with_ctx
 
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 # Configuration
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 TEST_DIR = os.path.abspath(os.path.dirname(__file__))
 TEST_DATA = os.path.join(TEST_DIR, 'data')
@@ -71,6 +71,7 @@ logger.setLevel(logging.INFO)
 ########################################################################
 
 class SchemaDemo(Schema):
+
     def __init__(self, data_source=':memory:', setup_script=SETUP_SCRIPT, setup_file=SETUP_FILE):
         Schema.__init__(self, data_source=data_source, setup_script=setup_script, setup_file=setup_file)
         self.add_table('person', ['ID', 'name', 'age'], proto=Person, id_cols=('ID',))
@@ -309,11 +310,25 @@ class TestMultipleSchema(unittest.TestCase):
         pass
 
 
+class AdvancedDemo(SchemaDemo):
+
+    @with_ctx
+    def demo(self, ctx=None):
+        p = Person("Buu", 1000)
+        p.ID = ctx.person.save(p)
+        return ctx.person.by_id(p.ID)
+
+
+class TestWithContext(unittest.TestCase):
+
+    def test_ms(self):
+        db = AdvancedDemo()
+        print(db.demo().age)
+        with db.ctx() as ctx:
+            print(db.demo(ctx=ctx))
+
+
 ########################################################################
 
-def main():
-    unittest.main()
-
-
 if __name__ == "__main__":
-    main()
+    unittest.main()

@@ -49,24 +49,25 @@ __maintainer__ = "Le Tuan Anh"
 __email__ = "<tuananh.ke@gmail.com>"
 __status__ = "Prototype"
 
-#-------------------------------------------------------------
+# -------------------------------------------------------------
 
 import os
 import sqlite3
 import collections
 import logging
+import functools
 
-#-------------------------------------------------------------
+# -------------------------------------------------------------
 # CONFIGURATION
-#-------------------------------------------------------------
+# -------------------------------------------------------------
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-#-------------------------------------------------------------
+# -------------------------------------------------------------
 # PuchiKarui
 # A minimalist SQLite wrapper library for Python which supports ORM features too.
-#-------------------------------------------------------------
+# -------------------------------------------------------------
 
 
 # A table schema
@@ -553,14 +554,28 @@ class Schema(object):
         return self.ds.open(schema=self)
 
 
-#-------------------------------------------------------------
+def with_ctx(func=None):
+    ''' Auto create a new context if not available '''
+    if not func:
+        return functools.partial(with_ctx)
+
+    @functools.wraps(func)
+    def func_with_context(_obj, *args, **kwargs):
+        if 'ctx' not in kwargs or kwargs['ctx'] is None:
+            # if context is empty, ensure context
+            with _obj.ctx() as new_ctx:
+                kwargs['ctx'] = new_ctx
+                return func(_obj, *args, **kwargs)
+        else:
+            # if context is available, just call the function
+            return func(_obj, *args, **kwargs)
+
+    return func_with_context
+
+
+# -------------------------------------------------------------
 # Main
-#-------------------------------------------------------------
+# -------------------------------------------------------------
 
-def main():
-    print("PuchiKarui is a Python module, not an application")
-
-
-#-------------------------------------------------------------
 if __name__ == "__main__":
-    main()
+    print("PuchiKarui is a Python module, not an application")
