@@ -61,14 +61,15 @@ import functools
 # CONFIGURATION
 # -------------------------------------------------------------
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+
+def getLogger():
+    return logging.getLogger(__name__)
+
 
 # -------------------------------------------------------------
 # PuchiKarui
 # A minimalist SQLite wrapper library for Python which supports ORM features too.
 # -------------------------------------------------------------
-
 
 # A table schema
 class Table:
@@ -86,7 +87,7 @@ class Table:
         try:
             collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
         except Exception as ex:
-            logger.warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
+            getLogger().warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
         return self
 
@@ -223,11 +224,11 @@ class DataSource:
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
         if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
-            logger.warning("DB does not exist. Setup is required.")
+            getLogger().warning("DB does not exist. Setup is required.")
             # run setup files
             if schema is not None and schema.setup_files:
                 for file_path in schema.setup_files:
-                    logger.debug("Executing script file: {}".format(file_path))
+                    getLogger().debug("Executing script file: {}".format(file_path))
                     exe.cur.executescript(self.read_file(file_path))
             # run setup scripts
             if schema.setup_scripts:
@@ -400,7 +401,7 @@ class ExecutionContext(object):
             try:
                 self.conn.commit()
             except Exception as e:
-                logger.exception("Cannot commit changes. e = %s" % e)
+                getLogger().exception("Cannot commit changes. e = %s" % e)
 
     def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         ''' Support these keywords where, values, orderby, limit and columns'''
@@ -418,7 +419,7 @@ class ExecutionContext(object):
 
     def delete_record(self, table, where=None, values=None):
         query = self.schema.query_builder.build_delete(table, where)
-        logger.debug("Executing: {q} | values={v}".format(q=query, v=values))
+        getLogger().debug("Executing: {q} | values={v}".format(q=query, v=values))
         return self.execute(query, values)
 
     def select_object_by_id(self, table, ids, columns=None):
@@ -461,13 +462,13 @@ class ExecutionContext(object):
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         try:
-            logger.debug('Executing q={} | p={}'.format(query, params))
+            getLogger().debug('Executing q={} | p={}'.format(query, params))
             if params:
                 return self.cur.execute(query, params)
             else:
                 return self.cur.execute(query)
         except:
-            logger.exception('Invalid query. q={}, p={}'.format(query, params))
+            getLogger().exception('Invalid query. q={}, p={}'.format(query, params))
             raise
 
     def executescript(self, query):
@@ -485,7 +486,7 @@ class ExecutionContext(object):
                     self.commit()
                 self.conn.close()
         except:
-            logger.exception("Error while closing connection")
+            getLogger().exception("Error while closing connection")
         finally:
             self.conn = None
 
@@ -505,7 +506,7 @@ class ExecutionContext(object):
         try:
             self.close()
         except Exception as e:
-            logger.exception("Error was raised while closing DB connection. e = %s" % e)
+            getLogger().exception("Error was raised while closing DB connection. e = %s" % e)
 
 
 class Schema(object):
