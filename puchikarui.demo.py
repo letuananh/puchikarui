@@ -1,39 +1,49 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
+''' Puchikarui demo script
 
-#Permission is hereby granted, free of charge, to any person obtaining a copy
-#of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+Latest version can be found at https://github.com/letuananh/puchikarui
 
-#The above copyright notice and this permission notice shall be included in
-#all copies or substantial portions of the Software.
+@author: Le Tuan Anh <tuananh.ke@gmail.com>
+@license: MIT
+'''
 
-#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-#THE SOFTWARE.
+# Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+import os
 from puchikarui import Schema
 
-#----------------------------------------------------------------------
-# CONFIGURATION
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Configuration
+# ----------------------------------------------------------------------
 
-SETUP_FILE = './test/data/init_script.sql'
-TEST_DB = './test/data/demo.db'
+MY_DIR = os.path.dirname(__file__)
+SETUP_FILE = os.path.join(MY_DIR, 'test/data/init_script.sql')
+TEST_DB = os.path.join(MY_DIR, 'test/data/demo.db')
 
 
-#----------------------------------------------------------------------
-# DATA STRUCTURES
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Data Structures
+# ----------------------------------------------------------------------
 
 class Person(object):
     def __init__(self, name='', age=-1):
@@ -48,13 +58,13 @@ class Person(object):
 class SchemaDemo(Schema):
     def __init__(self, data_source, setup_file=SETUP_FILE):
         Schema.__init__(self, data_source, setup_file=setup_file)
-        self.add_table('person', ['ID', 'name', 'age'], ('ID',), proto=Person)
+        self.add_table('person', ['ID', 'name', 'age'], id_cols=('ID',), proto=Person)
         self.add_table('hobby', ['pid', 'hobby'])
 
 
-#----------------------------------------------------------------------
-# MAIN
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------
 
 def main():
     db = SchemaDemo(TEST_DB)
@@ -70,6 +80,7 @@ def main():
     for person in persons:
         print("%s is %d years old." % (person.name, person.age))
     # update data
+    buu = db.person.select_single('name=?', ('Buu',))
     buu.age += 1
     db.person.save(buu)
     print("Buu aged now => {}".format(db.person.by_id(buu.ID)))
