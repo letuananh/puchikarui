@@ -41,6 +41,7 @@ References:
 import os
 import unittest
 import logging
+from puchikarui import DataSource
 from puchikarui import Schema, with_ctx
 
 
@@ -100,6 +101,16 @@ class Person(object):
 
 
 ########################################################################
+
+
+class TestUtilClass(unittest.TestCase):
+
+    def test_path(self):
+        my_home = os.path.expanduser('~')
+        expected_loc = os.path.join(my_home, 'tmp', 'test.db')
+        ds = DataSource('~/tmp/test.db')
+        self.assertEqual(expected_loc, ds.path)
+
 
 class TestDemoLib(unittest.TestCase):
 

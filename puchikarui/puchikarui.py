@@ -180,14 +180,22 @@ class Table:
 
 class DataSource:
 
-    def __init__(self, db_path, schema=None):
-        self._filepath = db_path
+    def __init__(self, db_path, schema=None, auto_expand_path=True):
+        self.auto_expand_path = auto_expand_path
+        self.path = db_path
         self._script_file_map = {}
         self.schema = schema
 
     @property
     def path(self):
         return self._filepath
+
+    @path.setter
+    def path(self, value):
+        if value and value.startswith('~') and self.auto_expand_path:
+            self._filepath = os.path.expanduser(value)
+        else:
+            self._filepath = value
 
     def read_file(self, path):
         if path not in self._script_file_map:
@@ -491,11 +499,11 @@ class ExecutionContext(object):
 class Schema(object):
     ''' Contains schema definition of a database
     '''
-    def __init__(self, data_source, setup_script=None, setup_file=None, auto_commit=True):
+    def __init__(self, data_source, setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
-            self.data_source = DataSource(data_source, schema=self)
+            self.data_source = DataSource(db_path=data_source, schema=self, auto_expand_path=auto_expand_path)
         self.auto_commit = auto_commit
         self.setup_files = []
         if setup_file:
