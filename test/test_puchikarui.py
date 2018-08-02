@@ -297,6 +297,14 @@ class SchemaAB(SchemaB, SchemaA):
         super().__init__(data_source=data_source, setup_script=setup_script, setup_file=setup_file)
         self.add_script('''INSERT INTO person_hobby VALUES ((SELECT ID FROM hobby WHERE name='magic'), (SELECT ID FROM person WHERE name='potter'));''')
 
+    @with_ctx
+    def all_hobby(self, ctx=None):
+        return ctx.hobby.select()
+
+    @with_ctx
+    def find_hobby(self, name, ctx=None):
+        return ctx.hobby.select("name = ?", (name,))
+
 
 class TestMultipleSchema(unittest.TestCase):
 
@@ -310,6 +318,10 @@ class TestMultipleSchema(unittest.TestCase):
             self.assertEqual(magic.name, 'magic')
             self.assertEqual(link.hid, magic.ID)
             self.assertEqual(link.pid, potter.ID)
+            # access schema function from context
+            self.assertEqual(len(ctx.all_hobby()), 1)
+            self.assertEqual(ctx.find_hobby('magic')[0].name, 'magic')
+            print
         pass
 
 

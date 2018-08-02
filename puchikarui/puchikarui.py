@@ -259,7 +259,7 @@ class DataSource:
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
         if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
-            getLogger().warning("DB does not exist. Setup is required.")
+            getLogger().warning("DB does not exist at {}. Setup is required.".format(self.path))
             # run setup files
             if schema is not None and schema.setup_files:
                 for file_path in schema.setup_files:
@@ -507,13 +507,20 @@ class ExecutionContext(object):
             self.conn = None
 
     def __getattr__(self, name):
-        if not self.schema or name not in self.schema._tables:
-            raise AttributeError('Attribute {} does not exist'.format(name))
-        else:
+        if self.schema is None:
+            raise Exception("Invalid schema")
+        elif name in self.schema._tables:
             tbl = getattr(self.schema, name)
             ctx = TableContext(tbl, self)
             setattr(self, name, ctx)
             return getattr(self, name)
+        else:
+            # try to get function from schema
+            _func = getattr(self.schema, name, None)
+            if _func is not None:
+                return _func
+            else:
+                raise AttributeError('Attribute {} does not exist'.format(name))
 
     def __enter__(self):
         return self
