@@ -43,6 +43,7 @@ import unittest
 import logging
 from puchikarui import DataSource
 from puchikarui import Schema, with_ctx
+from puchikarui import escape_like, head_like, tail_like, contain_like
 
 
 # ----------------------------------------------------------------------
@@ -328,6 +329,39 @@ class TestWithContext(unittest.TestCase):
         print(db.demo().age)
         with db.ctx() as ctx:
             print(db.demo(ctx=ctx))
+
+
+class TestHelpers(unittest.TestCase):
+
+    def test_escape(self):
+        actual = escape_like('_')
+        expect = '@_'
+        self.assertEqual(actual, expect)
+        actual = escape_like('%')
+        expect = '@%'
+        self.assertEqual(actual, expect)
+        actual = escape_like('@')
+        expect = '@@'
+        self.assertEqual(actual, expect)
+        actual = escape_like('')
+        expect = ''
+        self.assertEqual(actual, expect)
+        actual = escape_like('usual')
+        expect = 'usual'
+        self.assertEqual(actual, expect)
+        self.assertRaises(Exception, lambda: escape_like(None))
+        actual = escape_like('%_%@')
+        expect = '@%@_@%@@'
+        self.assertEqual(actual, expect)
+        actual = head_like('a@b')
+        expect = 'a@@b%'
+        self.assertEqual(actual, expect)
+        actual = tail_like('a@b')
+        expect = '%a@@b'
+        self.assertEqual(actual, expect)
+        actual = contain_like('a_@_b')
+        expect = '%a@_@@@_b%'
+        self.assertEqual(actual, expect)
 
 
 # ------------------------------------------------------------------------------

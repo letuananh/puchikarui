@@ -47,7 +47,55 @@ def getLogger():
 
 
 # -------------------------------------------------------------
-# Functions
+# Helper functions
+# -------------------------------------------------------------
+
+def update_obj(source, target, *fields, **field_map):
+    source_dict = source.__dict__ if hasattr(source, '__dict__') else source
+    if not fields:
+        fields = source_dict.keys()
+    for f in fields:
+        target_f = f if f not in field_map else field_map[f]
+        setattr(target, target_f, source_dict[f])
+
+
+def to_obj(cls, obj_data=None, *fields, **field_map):
+    ''' prioritize obj_dict when there are conficts '''
+    obj_dict = obj_data.__dict__ if hasattr(obj_data, '__dict__') else obj_data
+    if not fields:
+        fields = obj_dict.keys()
+    obj = cls()
+    update_obj(obj_dict, obj, *fields, **field_map)
+    return obj
+
+
+def escape_like(input_string, escape_char='@'):
+    tranmap = {'%': escape_char + '%',
+               '_': escape_char + '_',
+               escape_char: escape_char + escape_char}
+    new_str = []
+    for c in input_string:
+        if c in tranmap:
+            new_str.append(tranmap[c])
+        else:
+            new_str.append(c)
+    return ''.join(new_str)
+
+
+def head_like(input_string, **kwargs):
+    return escape_like(input_string, **kwargs) + '%'
+
+
+def tail_like(input_string, **kwargs):
+    return '%' + escape_like(input_string, **kwargs)
+
+
+def contain_like(input_string, **kwargs):
+    return '%' + escape_like(input_string, **kwargs) + '%'
+
+
+# -------------------------------------------------------------
+# Classes
 # -------------------------------------------------------------
 
 # A table schema
@@ -247,25 +295,6 @@ class DataSource:
     def executefile(self, file_loc):
         with self.open() as exe:
             return exe.executefile(file_loc)
-
-
-def update_obj(source, target, *fields, **field_map):
-    source_dict = source.__dict__ if hasattr(source, '__dict__') else source
-    if not fields:
-        fields = source_dict.keys()
-    for f in fields:
-        target_f = f if f not in field_map else field_map[f]
-        setattr(target, target_f, source_dict[f])
-
-
-def to_obj(cls, obj_data=None, *fields, **field_map):
-    ''' prioritize obj_dict when there are conficts '''
-    obj_dict = obj_data.__dict__ if hasattr(obj_data, '__dict__') else obj_data
-    if not fields:
-        fields = obj_dict.keys()
-    obj = cls()
-    update_obj(obj_dict, obj, *fields, **field_map)
-    return obj
 
 
 class QueryBuilder(object):

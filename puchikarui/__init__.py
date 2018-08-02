@@ -45,5 +45,7 @@ __status__ = "Prototype"
 ########################################################################
 
 from .puchikarui import Schema, ExecutionContext, DataSource, Table, with_ctx
+# helpers
+from .puchikarui import escape_like, head_like, tail_like, contain_like
 
 __all__ = ["Schema", "ExecutionContext", "DataSource", "Table", "with_ctx"]
