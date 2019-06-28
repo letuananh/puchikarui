@@ -263,7 +263,7 @@ class DataSource:
             # run setup files
             if schema is not None and schema.setup_files:
                 for file_path in schema.setup_files:
-                    getLogger().debug("Executing script file: {}".format(file_path))
+                    getLogger().info("Executing script file: {}".format(file_path))
                     exe.cur.executescript(self.read_file(file_path))
             # run setup scripts
             if schema.setup_scripts:
