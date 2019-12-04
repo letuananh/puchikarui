@@ -100,7 +100,11 @@ def contain_like(input_string, **kwargs):
 
 # A table schema
 class Table:
-    def __init__(self, name, *columns, data_source=None, proto=None, id_cols=('rowid',), **field_map):
+    def __init__(self, name, *columns, data_source=None, proto=None, id_cols=('rowid',), strict_mode=False, **field_map):
+        ''' Contains information of a table in the database
+            strict_mode -- Warn users if a bad database design is detected (defaulted to False)
+        '''
+        self._strict_mode = strict_mode
         self.name = name
         self.columns = []
         self.add_fields(*columns)
@@ -111,10 +115,11 @@ class Table:
 
     def add_fields(self, *columns):
         self.columns.extend(columns)
-        try:
-            collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
-        except Exception as ex:
-            getLogger().warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
+        if self._strict_mode:
+            try:
+                collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
+            except Exception as ex:
+                getLogger().warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
         return self
 
@@ -535,7 +540,7 @@ class ExecutionContext(object):
 class Schema(object):
     ''' Contains schema definition of a database
     '''
-    def __init__(self, data_source, setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True):
+    def __init__(self, data_source, setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True, strict_mode=False):
         if type(data_source) is DataSource:
             self.data_source = data_source
         else:
@@ -549,6 +554,7 @@ class Schema(object):
             self.setup_scripts.append(setup_script)
         self._tables = {}
         self.query_builder = QueryBuilder(self)
+        self._strict_mode = strict_mode
 
     def add_file(self, setup_file):
         self.setup_files.append(setup_file)
@@ -559,9 +565,10 @@ class Schema(object):
         return self
 
     def add_table(self, name, columns=None, proto=None, id_cols=None, alias=None, **field_map):
+        ''' Add a new table design to this schema '''
         if not columns:
             columns = []
-        tbl_obj = Table(name, *columns, data_source=self.data_source, proto=proto, id_cols=id_cols, **field_map)
+        tbl_obj = Table(name, *columns, data_source=self.data_source, proto=proto, id_cols=id_cols, strict_mode=self._strict_mode, **field_map)
         setattr(self, name, tbl_obj)
         self._tables[name] = tbl_obj
         if alias:
