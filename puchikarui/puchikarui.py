@@ -117,7 +117,7 @@ class Table:
         self.columns.extend(columns)
         if self._strict_mode:
             try:
-                collections.namedtuple(self.name, self.columns, verbose=False, rename=False)
+                collections.namedtuple(self.name, self.columns, rename=False)
             except Exception as ex:
                 getLogger().warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
@@ -207,7 +207,7 @@ class Table:
             return self.ctx(ctx).delete_obj(obj)
         else:
             with self._data_source.open() as ctx:
-                return self.ctx(ctx).delete_obj()
+                return self.ctx(ctx).delete_obj(obj)
 
     def update(self, new_values, where='', where_values=None, columns=None, ctx=None):
         if ctx is not None:
@@ -506,7 +506,7 @@ class ExecutionContext(object):
                 if self.auto_commit:
                     self.commit()
                 self.conn.close()
-        except:
+        except Exception as e:
             getLogger().exception("Error while closing connection")
         finally:
             self.conn = None
