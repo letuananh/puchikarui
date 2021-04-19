@@ -1,33 +1,11 @@
 # -*- coding: utf-8 -*-
 
-'''
-Minimalist SQLite ORM engine for Python
-
-Latest version can be found at https://github.com/letuananh/puchikarui
-
-@author: Le Tuan Anh <tuananh.ke@gmail.com>
-@license: MIT
+''' A minimalist SQLite helper library for Python with ORM-like features
 '''
 
+# Latest version can be found at https://github.com/letuananh/puchikarui
 # Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# license: MIT
 
 ########################################################################
 
@@ -36,14 +14,6 @@ import sqlite3
 import collections
 import logging
 import functools
-
-
-# -------------------------------------------------------------
-# Configuration
-# -------------------------------------------------------------
-
-def getLogger():
-    return logging.getLogger(__name__)
 
 
 # -------------------------------------------------------------
@@ -119,7 +89,7 @@ class Table:
             try:
                 collections.namedtuple(self.name, self.columns, rename=False)
             except Exception as ex:
-                getLogger().warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
+                logging.getLogger(__name__).warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
         return self
 
@@ -264,11 +234,11 @@ class DataSource:
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
         if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
-            getLogger().warning("DB does not exist at {}. Setup is required.".format(self.path))
+            logging.getLogger(__name__).warning("DB does not exist at {}. Setup is required.".format(self.path))
             # run setup files
             if schema is not None and schema.setup_files:
                 for file_path in schema.setup_files:
-                    getLogger().info("Executing script file: {}".format(file_path))
+                    logging.getLogger(__name__).info("Executing script file: {}".format(file_path))
                     exe.cur.executescript(self.read_file(file_path))
             # run setup scripts
             if schema.setup_scripts:
@@ -422,7 +392,7 @@ class ExecutionContext(object):
             try:
                 self.conn.commit()
             except Exception as e:
-                getLogger().exception("Cannot commit changes. e = %s" % e)
+                logging.getLogger(__name__).exception("Cannot commit changes. e = %s" % e)
 
     def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         ''' Support these keywords where, values, orderby, limit and columns'''
@@ -440,7 +410,7 @@ class ExecutionContext(object):
 
     def delete_record(self, table, where=None, values=None):
         query = self.schema.query_builder.build_delete(table, where)
-        getLogger().debug("Executing: {q} | values={v}".format(q=query, v=values))
+        logging.getLogger(__name__).debug("Executing: {q} | values={v}".format(q=query, v=values))
         return self.execute(query, values)
 
     def select_object_by_id(self, table, ids, columns=None):
@@ -483,13 +453,13 @@ class ExecutionContext(object):
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         try:
-            getLogger().debug('Executing q={} | p={}'.format(query, params))
+            logging.getLogger(__name__).debug('Executing q={} | p={}'.format(query, params))
             if params:
                 return self.cur.execute(query, params)
             else:
                 return self.cur.execute(query)
         except:
-            getLogger().exception('Invalid query. q={}, p={}'.format(query, params))
+            logging.getLogger(__name__).exception('Invalid query. q={}, p={}'.format(query, params))
             raise
 
     def executescript(self, query):
@@ -507,7 +477,7 @@ class ExecutionContext(object):
                     self.commit()
                 self.conn.close()
         except Exception as e:
-            getLogger().exception("Error while closing connection")
+            logging.getLogger(__name__).exception("Error while closing connection")
         finally:
             self.conn = None
 
@@ -534,7 +504,7 @@ class ExecutionContext(object):
         try:
             self.close()
         except Exception as e:
-            getLogger().exception("Error was raised while closing DB connection. e = %s" % e)
+            logging.getLogger(__name__).exception("Error was raised while closing DB connection. e = %s" % e)
 
 
 class Schema(object):

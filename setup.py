@@ -63,6 +63,10 @@ setup(
     name='puchikarui',
     version=pkg_info['__version__'],
     url=pkg_info['__url__'],
+    project_urls={
+        "Bug Tracker": "https://github.com/letuananh/puchikarui/issues",
+        "Source Code": "https://github.com/letuananh/puchikarui/"
+    },
     license=pkg_info['__license__'],
     author=pkg_info['__author__'],
     keywords="SQLite sqlite3 database",
