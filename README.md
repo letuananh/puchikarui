@@ -2,12 +2,15 @@ Puchikarui
 ==========
 
 A minimalist SQLite wrapper library for Python 3 which supports ORM features.
+
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/letuananh/puchikarui.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/letuananh/puchikarui/alerts/)
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/letuananh/puchikarui.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/letuananh/puchikarui/context:python)
+
 It is available on PyPI and can be installed using `pip`.
 
 ```bash
 pip install puchikarui
 # or with python -m pip
-python -m pip install puchikarui
 python3 -m pip install puchikarui
 ```
 
