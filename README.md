@@ -8,7 +8,7 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 
 ## Installation
 
-It is available on PyPI and can be installed using `pip`.
+It is available on [PyPI](https://pypi.org/project/puchikarui/) and can be installed using `pip`.
 
 ```bash
 pip install puchikarui
