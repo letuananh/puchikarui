@@ -36,7 +36,6 @@ import io
 import os
 from setuptools import setup
 
-import puchikarui
 
 ########################################################################
 
