@@ -41,8 +41,11 @@ References:
 import os
 import unittest
 import logging
-from puchikarui import DataSource
-from puchikarui import Schema, with_ctx
+from pathlib import Path
+
+import sqlite3
+from puchikarui import DataSource, ExecutionContext
+from puchikarui import Database, Schema, with_ctx
 from puchikarui import escape_like, head_like, tail_like, contain_like
 
 
@@ -50,13 +53,13 @@ from puchikarui import escape_like, head_like, tail_like, contain_like
 # Configuration
 # ----------------------------------------------------------------------
 
-TEST_DIR = os.path.abspath(os.path.dirname(__file__))
-TEST_DATA = os.path.join(TEST_DIR, 'data')
-SETUP_FILE = os.path.join(TEST_DATA, 'init_script.sql')
-SETUP_SCRIPT = "INSERT INTO person (name, age) VALUES ('Chun', 78)"
-TEST_DB = os.path.join(TEST_DIR, 'data', 'test.db')
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+TEST_DIR = Path(os.path.abspath(os.path.dirname(__file__)))
+TEST_DATA = TEST_DIR / 'data'
+SETUP_FILE = TEST_DATA / 'init_script.sql'
+SETUP_SCRIPT = """INSERT INTO person (name, age) VALUES ('Chun', 78); 
+INSERT INTO school (name, address) VALUES('Surpreme Coding', 'localhost');"""
+TEST_DB = TEST_DATA / 'test.db'
 
 
 # ------------------------------------------------------------------------------
@@ -65,11 +68,12 @@ logger.setLevel(logging.INFO)
 
 class SchemaDemo(Schema):
 
-    def __init__(self, data_source=':memory:', setup_script=SETUP_SCRIPT, setup_file=SETUP_FILE):
+    def __init__(self, data_source=':memory:', setup_script=SETUP_SCRIPT, setup_file=SETUP_FILE, *args, **kwargs):
         Schema.__init__(self, data_source=data_source, setup_script=setup_script, setup_file=setup_file)
         self.add_table('person', ['ID', 'name', 'age'], proto=Person, id_cols=('ID',))
         self.add_table('hobby').add_fields('pid', 'hobby')
-        self.add_table('diary', ['ID', 'pid', 'text'], proto=Diary).set_id('ID').field_map(pid='ownerID', text='content')
+        self.add_table('school', alias='college').add_fields('ID', 'name', 'address')
+        self.add_table('diary', ['ID', 'pid', 'text']).set_proto(Diary).set_id('ID').field_map(pid='ownerID', text='content')
 
 
 class Diary(object):
@@ -112,6 +116,109 @@ class TestUtilClass(unittest.TestCase):
         ds = DataSource('~/tmp/test.db')
         self.assertEqual(expected_loc, ds.path)
 
+    def test_with_ctx(self):
+        class CtxSchema(Schema):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.add_script('''CREATE TABLE test(name TEXT, age INTEGER); INSERT INTO test VALUES ('a', 50)''')
+                self.add_table('test', 'name age'.split())
+
+            @with_ctx
+            def get_all(self, ctx=None):
+                return ctx.test.select()
+
+        x = CtxSchema()
+        all = x.get_all()
+        self.assertIsNotNone(all)
+        self.assertEqual(all[0].name, 'a')
+        self.assertEqual(all[0].age, 50)
+
+
+class TestSchema(unittest.TestCase):
+
+    def test_bad_schema(self):
+        class BadSchema(Schema):
+            def __init__(self, *args, strict_mode=True, **kwargs):
+                super().__init__(*args, strict_mode=strict_mode, **kwargs)
+                self.add_table('test', 'name class age'.split())
+        with self.assertLogs('puchikarui', level='WARNING') as log:
+            BadSchema()
+            _has_log = False
+            for log in log.output:
+                if 'Bad database design detected (Table: test' in log:
+                    _has_log = True
+            self.assertTrue(_has_log)
+
+    def test_no_schema(self):
+        class NoSchema(Schema):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.add_script('''CREATE TABLE test(ID INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER);''')
+        n = NoSchema()
+        for name, age in zip('ABCDE', range(50, 55)):
+            n.insert_record('test', (None, f'Person {name}', age))
+        rows = [(row['ID'], row['name'], row['age']) for row in n.select_record('test', where='age >= ?', values=(51,))]
+        expected = [(2, 'Person B', 51), (3, 'Person C', 52), (4, 'Person D', 53), (5, 'Person E', 54)]
+        self.assertEqual(rows, expected)
+
+    def test_accessing_weird_attr(self):
+        s = SchemaDemo()
+        self.assertRaises(AttributeError, lambda: s.boo())
+        self.assertRaises(AttributeError, lambda: print(s.foo))
+
+    def test_auto_commit(self):
+        s = SchemaDemo(auto_commit=False)
+        with s.ctx() as ctx:
+            ctx.auto_commit = False
+            ctx.begin()
+            ctx.insert_record('school', (None, 'School A1', 'Street 1'))
+            ctx.insert_record('school', (None, 'School A2', 'Street 2'))
+            ctx.insert_record('school', (None, 'School A3', 'Street 3'))
+            self.assertEqual(4, len(ctx.school.select()))
+            ctx.rollback()
+            self.assertEqual(1, len(ctx.school.select()))
+            # call ctx.rollback() again should be safe
+            ctx.rollback()
+            ctx.insert_record('school', (None, 'School A1', 'Street 1'))
+            self.assertEqual(2, len(ctx.school.select()))
+            ctx.rollback()  # now rollback again
+            self.assertEqual(1, len(ctx.school.select()))
+            # force rollback should fail
+            with self.assertLogs('puchikarui', level='ERROR') as logs:
+                self.assertRaises(sqlite3.OperationalError, lambda: ctx.execute("ROLLBACK"))
+                _found = False
+                for log in logs.output:
+                    if 'cannot rollback - no transaction is active' in log:
+                        _found = True
+                        break
+                self.assertTrue(_found)
+
+    def test_proto(self):
+        ds = DataSource(':memory:')
+        s = SchemaDemo(ds)
+        ds.schema = s
+        self.assertEqual(str(s.person), "Table('person', *['ID', 'name', 'age'])")
+        p = s.person.select_single()
+        self.assertIsInstance(p, Person)
+        # select tbl with proto by ID
+        p2 = s.select_object_by_id(s.person, (p.ID,))
+        self.assertEqual((p.ID, p.name, p.age), (p2.ID, p2.name, p2.age))
+        self.assertNotEqual(p, p2)
+        # non-existence ID
+        p3 = s.person.by_id(None)
+        self.assertIsNone(p3)
+        # select tuple
+        h = s.hobby.select_single()
+        self.assertIsInstance(h, tuple)
+        school = s.school.select_single()  # first object
+        # test to_obj
+        objs = s.select_record(s.school)  # all records
+        self.assertEqual(school, objs[0])
+        # select tuple by id (no proto)
+        school_obj = s.school.by_id(school.ID)
+        self.assertEqual(school, school_obj)
+        self.assertNotEqual(id(school), id(school_obj))
+
 
 class TestDemoLib(unittest.TestCase):
 
@@ -119,7 +226,7 @@ class TestDemoLib(unittest.TestCase):
     def setUpClass(cls):
         print("Setting up tests ...")
         if os.path.isfile(TEST_DB):
-            logger.info("Test DB exists, removing it now")
+            logging.getLogger(__name__).info("Test DB exists, removing it now")
             os.unlink(TEST_DB)
 
     def test_sqlite_methods(self):
@@ -141,6 +248,7 @@ class TestDemoLib(unittest.TestCase):
         db.person.insert('Kent', 42)
         # Test select data
         persons = db.person.select(where='age > ?', values=[25], orderby='age', limit=10)
+        self.assertIsNotNone(persons)
         expected = [('Ji', 28), ('Ka', 32), ('Vi', 33), ('Kent', 42), ('Chun', 78)]
         actual = [(person.name, person.age) for person in persons]
         self.assertEqual(expected, actual)
@@ -341,6 +449,72 @@ class TestWithContext(unittest.TestCase):
         print(db.demo().age)
         with db.ctx() as ctx:
             print(db.demo(ctx=ctx))
+
+    def test_diff_context(self):
+        db = SchemaDemo()
+        with db.ctx() as ctx:
+            # insert 2 persons into default ctx
+            id = db.person.insert('Another 1', 100)
+            db.person.insert('Another 2', 101)
+            db.person.insert('Another 3', 102)
+            db.person.delete_obj(db.person.by_id(id))
+            # 1 person into the created context
+            id2 = db.person.insert('New 1', 50, ctx=ctx)
+            id3 = db.person.insert('New 2', 51, ctx=ctx)
+            db.person.insert('New 3', 52, ctx=ctx)
+            db.person.delete_obj(db.person.by_id(id2, ctx=ctx), ctx=ctx)
+            db.person.delete('id=?', (id3,), ctx=ctx)
+            # count persons in each context
+            persons_ctx1 = db.person.select()
+            persons_ctx2 = db.person.select(ctx=ctx)
+            self.assertEqual(len(persons_ctx1), 8)
+            self.assertEqual(len(persons_ctx2), 7)
+
+    def test_sep_context(self):
+        ctx = ExecutionContext(':memory:', None)
+        r = ctx.select('SELECT 2')
+        self.assertEqual(r[0][0], 2)
+        self.assertIsNotNone(ctx.conn)
+        ctx.close()
+        self.assertIsNone(ctx.conn)
+        ctx.close()
+
+    def test_default_context(self):
+        db = SchemaDemo()
+        print("Select persons ...")
+        persons = db.person.select()
+        self.assertEqual(len(persons), 6)
+        print("Create a new person")
+        db.person.save(Person("New Person", 50))
+        self.assertEqual(len(db.person.select()), 7)
+        # native query
+        person_tuples = [tuple(p) for p in db.select('SELECT * FROM person')]
+        person_dicts = [dict(p) for p in db.select('SELECT * FROM person')]
+        expected_tuples = [(1, 'Ji', 28),
+                           (2, 'Zen', 25),
+                           (3, 'Ka', 32),
+                           (4, 'Anh', 15),
+                           (5, 'Vi', 33),
+                           (6, 'Chun', 78),
+                           (7, 'New Person', 50)]
+        expected_dicts = [{'ID': 1, 'name': 'Ji', 'age': 28},
+                          {'ID': 2, 'name': 'Zen', 'age': 25},
+                          {'ID': 3, 'name': 'Ka', 'age': 32},
+                          {'ID': 4, 'name': 'Anh', 'age': 15},
+                          {'ID': 5, 'name': 'Vi', 'age': 33},
+                          {'ID': 6, 'name': 'Chun', 'age': 78},
+                          {'ID': 7, 'name': 'New Person', 'age': 50}]
+        self.assertEqual(expected_tuples, person_tuples)
+        self.assertEqual(expected_dicts, person_dicts)
+
+
+class TestPath(unittest.TestCase):
+
+    def test_expand_path(self):
+        db = Schema(Path('~/test.db'))
+        self.assertEqual(db.path, os.path.expanduser('~/test.db'))
+        db2 = Database(Path('~/test.db'), auto_expand_path=False)
+        self.assertEqual(str(db2.path), '~/test.db')
 
 
 class TestHelpers(unittest.TestCase):
