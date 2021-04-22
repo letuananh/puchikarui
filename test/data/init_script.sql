@@ -6,6 +6,12 @@ CREATE TABLE person(
        age INTEGER
 );
 
+CREATE TABLE school(
+       ID INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL,
+       address TEXT
+);
+
 CREATE TABLE hobby (
      pid INTEGER NOT NULL,
      hobby TEXT,
