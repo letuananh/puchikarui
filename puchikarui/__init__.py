@@ -29,23 +29,17 @@ Latest version can be found at https://github.com/letuananh/puchikarui
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-__author__ = "Le Tuan Anh"
-__email__ = "tuananh.ke@gmail.com"
-__copyright__ = "Copyright 2014, puchikarui"
-__credits__ = []
-__license__ = "MIT License"
-__description__ = "A minimalist SQLite wrapper library for Python which supports ORM features."
-__url__ = "https://letuananh.github.io/puchikarui/"
-__maintainer__ = "Le Tuan Anh"
-__version_major__ = "0.1"
-__version__ = "{}a3".format(__version_major__)
-__version_long__ = "{} - Alpha".format(__version_major__)
-__status__ = "Prototype"
+
 
 ########################################################################
 
-from .puchikarui import Schema, ExecutionContext, DataSource, Table, with_ctx
+from .__version__ import __author__, __email__, __copyright__, __maintainer__
+from .__version__ import __credits__, __license__, __description__, __url__
+from .__version__ import __version_major__, __version_long__, __version__, __status__
+
+from .puchikarui import Database, Schema, ExecutionContext, DataSource, Table, with_ctx
 # helpers
 from .puchikarui import escape_like, head_like, tail_like, contain_like
 
-__all__ = ["Schema", "ExecutionContext", "DataSource", "Table", "with_ctx"]
+__all__ = ["Schema", "ExecutionContext", "DataSource", "Table", "with_ctx",
+           "__version__", "__author__", "__description__", "__copyright__"]

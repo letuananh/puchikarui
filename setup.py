@@ -36,7 +36,6 @@ import io
 import os
 from setuptools import setup
 
-import puchikarui
 
 ########################################################################
 
@@ -54,20 +53,28 @@ def read(*filenames, **kwargs):
     return sep.join(buf)
 
 
-long_description = read('README.md', 'CHANGES.md')
+long_description = read('README.md')
+pkg_info = {}
+exec(read('puchikarui/__version__.py'), pkg_info)
+
 
 setup(
     name='puchikarui',
-    version=puchikarui.__version__,
-    url=puchikarui.__url__,
-    license=puchikarui.__version__,
-    author=puchikarui.__author__,
+    version=pkg_info['__version__'],
+    url=pkg_info['__url__'],
+    project_urls={
+        "Bug Tracker": "https://github.com/letuananh/puchikarui/issues",
+        "Source Code": "https://github.com/letuananh/puchikarui/"
+    },
+    license=pkg_info['__license__'],
+    author=pkg_info['__author__'],
     keywords="SQLite sqlite3 database",
     tests_require=[],
     install_requires=[],
-    author_email=puchikarui.__email__,
-    description=puchikarui.__description__,
+    author_email=pkg_info['__email__'],
+    description=pkg_info['__description__'],
     long_description=long_description,
+    long_description_content_type='text/markdown',
     packages=['puchikarui'],
     include_package_data=True,
     platforms='any',
@@ -76,7 +83,7 @@ setup(
                  'Natural Language :: English',
                  'Environment :: Plugins',
                  'Intended Audience :: Developers',
-                 'License :: OSI Approved :: {}'.format(puchikarui.__license__),
+                 'License :: OSI Approved :: {}'.format(pkg_info['__license__']),
                  'Operating System :: OS Independent',
                  'Topic :: Software Development :: Libraries :: Python Modules',
                  'Topic :: Database']

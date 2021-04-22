@@ -1,33 +1,11 @@
 # -*- coding: utf-8 -*-
 
-'''
-Minimalist SQLite ORM engine for Python
-
-Latest version can be found at https://github.com/letuananh/puchikarui
-
-@author: Le Tuan Anh <tuananh.ke@gmail.com>
-@license: MIT
+''' A minimalist SQLite helper library for Python with ORM-like features
 '''
 
+# Latest version can be found at https://github.com/letuananh/puchikarui
 # Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# license: MIT
 
 ########################################################################
 
@@ -36,14 +14,6 @@ import sqlite3
 import collections
 import logging
 import functools
-
-
-# -------------------------------------------------------------
-# Configuration
-# -------------------------------------------------------------
-
-def getLogger():
-    return logging.getLogger(__name__)
 
 
 # -------------------------------------------------------------
@@ -119,7 +89,7 @@ class Table:
             try:
                 collections.namedtuple(self.name, self.columns, rename=False)
             except Exception as ex:
-                getLogger().warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
+                logging.getLogger(__name__).warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
         self.template = collections.namedtuple(self.name, self.columns, rename=True)
         return self
 
@@ -139,20 +109,14 @@ class Table:
         self._field_map.update(field_map)
         return self
 
+    def __repr__(self):
+        return f"Table({repr(self.name)}, *{repr(self.columns)})"
+
     def __str__(self):
-        return "Table: %s - Cols: %s" % (self.name, self.columns)
+        return repr(self)
 
     def to_table(self, row_tuples, columns=None):
-        if not row_tuples:
-            raise ValueError("Invalid row_tuples")
-        else:
-            if self._proto:
-                return [self.to_obj(x, columns) for x in row_tuples]
-            if columns:
-                new_tuples = collections.namedtuple(self.name, columns, rename=True)
-                return [self.to_row(x, new_tuples) for x in row_tuples]
-            else:
-                return [self.to_row(x) for x in row_tuples]
+        return [self.to_obj(x, columns) for x in row_tuples]
 
     def to_row(self, row_tuple, template=None):
         if template:
@@ -163,7 +127,11 @@ class Table:
     def to_obj(self, row_tuple, columns=None):
         # fall back to row_tuple
         if not self._proto:
-            return self.to_row(row_tuple)
+            if columns:
+                new_tuples = collections.namedtuple(self.name, columns, rename=True)
+                return self.to_row(row_tuple, new_tuples)
+            else:
+                return self.to_row(row_tuple)
         # else create objects
         if not columns:
             columns = self.columns
@@ -171,64 +139,59 @@ class Table:
         # assign values
         return new_obj
 
+    def ctx(self, ctx):
+        return TableContext(self, ctx)
+
+    def __ds_ctx(self):
+        return getattr(self._data_source, self.name)
+
     def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
+            return self.__ds_ctx().select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
 
     def select(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).select(where, values, orderby=orderby, limit=limit, columns=columns)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).select(where, values, orderby=orderby, limit=limit, columns=columns)
-
-    def ctx(self, ctx):
-        return TableContext(self, ctx)
+            return self.__ds_ctx().select(where, values, orderby=orderby, limit=limit, columns=columns)
 
     def insert(self, *values, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).insert(*values, columns=columns)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).insert(*values, columns=columns)
+            return self.__ds_ctx().insert(*values, columns=columns)
 
     def delete(self, where=None, values=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).delete(where=where, values=values)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).delete(where=where, values=values)
+            return self.__ds_ctx().delete(where=where, values=values)
 
     def delete_obj(self, obj, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).delete_obj(obj)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).delete_obj(obj)
+            return self.__ds_ctx().delete_obj(obj)
 
     def update(self, new_values, where='', where_values=None, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).update(new_values, where, where_values, columns)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).update(new_values, where, where_values, columns)
+            return self.__ds_ctx().update(new_values, where, where_values, columns)
 
     def by_id(self, *args, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).by_id(*args, columns=columns)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).by_id(*args, columns=columns)
+            return self.__ds_ctx().by_id(*args, columns=columns)
 
     def save(self, obj, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).save(obj, columns)
         else:
-            with self._data_source.open() as ctx:
-                return self.ctx(ctx).save(obj, columns)
+            return self.__ds_ctx().save(obj, columns)
 
 
 class DataSource:
@@ -238,6 +201,12 @@ class DataSource:
         self.path = db_path
         self._script_file_map = {}
         self.schema = schema
+        self.__default_ctx_obj = None
+
+    def __del__(self):
+        logging.getLogger(__name__).debug("Destroying a data source")
+        if self.__default_ctx_obj is not None:
+            self.__default_ctx_obj.close()
 
     @property
     def path(self):
@@ -245,7 +214,7 @@ class DataSource:
 
     @path.setter
     def path(self, value):
-        if value and value.startswith('~') and self.auto_expand_path:
+        if value and str(value).startswith('~') and self.auto_expand_path:
             self._filepath = os.path.expanduser(value)
         else:
             self._filepath = value
@@ -260,46 +229,36 @@ class DataSource:
         ''' Create a context to execute queries '''
         if schema is None:
             schema = self.schema
-        ac = auto_commit if auto_commit is not None else schema.auto_commit
+        ac = auto_commit if auto_commit is not None else schema.auto_commit if schema else None
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
-        if not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
-            getLogger().warning("DB does not exist at {}. Setup is required.".format(self.path))
-            # run setup files
-            if schema is not None and schema.setup_files:
-                for file_path in schema.setup_files:
-                    getLogger().info("Executing script file: {}".format(file_path))
-                    exe.cur.executescript(self.read_file(file_path))
-            # run setup scripts
-            if schema.setup_scripts:
-                for script in schema.setup_scripts:
-                    exe.cur.executescript(script)
+        if self.path:
+            if str(self.path) == ':memory:' or not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
+                logging.getLogger(__name__).warning("DB does not exist at {}. Setup is required.".format(self.path))
+                # run setup files
+                if schema is not None and schema.setup_files:
+                    for file_path in schema.setup_files:
+                        logging.getLogger(__name__).info("Executing script file: {}".format(file_path))
+                        exe.cur.executescript(self.read_file(file_path))
+                # run setup scripts
+                if schema is not None and schema.setup_scripts:
+                    for script in schema.setup_scripts:
+                        exe.cur.executescript(script)
         return exe
 
-    def select(self, query, params=None):
-        with self.open() as exe:
-            return exe.select(query, params)
+    def __default_ctx(self):
+        ''' Create a default reusable connection '''
+        if self.__default_ctx_obj is None:
+            self.__default_ctx_obj = self.open()
+        return self.__default_ctx_obj
 
-    def select_single(self, query, params=None):
-        with self.open() as exe:
-            return exe.select_single(query, params)
-
-    def select_scalar(self, query, params=None):
-        with self.open() as exe:
-            return exe.select_scalar(query, params)
-
-    # Helper functions
-    def execute(self, query, params=None):
-        with self.open() as exe:
-            return exe.execute(query, params)
-
-    def executescript(self, query):
-        with self.open() as exe:
-            return exe.executescript(query)
-
-    def executefile(self, file_loc):
-        with self.open() as exe:
-            return exe.executefile(file_loc)
+    def __getattr__(self, name):
+        # try to get function from default context
+        _ctx = self.__default_ctx()
+        if hasattr(_ctx, name):
+            return getattr(_ctx, name)
+        else:
+            raise AttributeError('Attribute {} does not exist'.format(name))
 
 
 class QueryBuilder(object):
@@ -310,12 +269,16 @@ class QueryBuilder(object):
 
     def build_select(self, table, where=None, orderby=None, limit=None, columns=None):
         query = []
-        if not columns:
-            columns = table.columns
+        if isinstance(table, Table):
+            if not columns:
+                columns = table.columns
+            table_name = table.name
+        else:
+            table_name = str(table)
         query.append("SELECT ")
-        query.append(','.join(columns))
+        query.append(','.join(columns) if columns else '*')
         query.append(" FROM ")
-        query.append(table.name)
+        query.append(table_name)
         if where:
             query.append(" WHERE ")
             query.append(where)
@@ -329,13 +292,20 @@ class QueryBuilder(object):
 
     def build_insert(self, table, values, columns=None):
         ''' Insert an active record into DB and return lastrowid if available '''
-        if not columns:
-            columns = table.columns
-        if len(values) < len(columns):
-            column_names = ','.join(columns[-len(values):])
+        if isinstance(table, Table):
+            table_name = table.name
+            if not columns:
+                columns = table.columns
         else:
-            column_names = ','.join(columns)
-        query = "INSERT INTO %s (%s) VALUES (%s) " % (table.name, column_names, ','.join(['?'] * len(values)))
+            table_name = str(table)
+        if columns:
+            if len(values) < len(columns):
+                column_names = ','.join(columns[-len(values):]) 
+            else:
+                column_names = ','.join(columns)
+            query = "INSERT INTO %s (%s) VALUES (%s) " % (table_name, column_names, ','.join(['?'] * len(values)))
+        else:
+            query = "INSERT INTO %s VALUES (%s) " % (table_name, ','.join(['?'] * len(values)))
         return query
 
     def build_update(self, table, where='', columns=None):
@@ -354,7 +324,7 @@ class QueryBuilder(object):
         if where:
             query = "DELETE FROM {tbl} WHERE {where}".format(tbl=table.name, where=where)
         else:
-            query = "DELETE FROM {tbl}".format(tbl=self.name)
+            query = "DELETE FROM {tbl}".format(tbl=table.name)
         return query
 
 
@@ -395,7 +365,7 @@ class TableContext(object):
         else:
             # insert
             return self._context.insert_object(self._table, obj, columns, self._table._field_map)
-
+        
     def delete_obj(self, obj):
         return self._context.delete_object(self._table, obj)
 
@@ -404,7 +374,7 @@ class ExecutionContext(object):
     ''' Create a context to work with a schema which closes connection when destroyed
     '''
     def __init__(self, path, schema, auto_commit=True):
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.cur = self.conn.cursor()
         self.schema = schema
@@ -417,17 +387,28 @@ class ExecutionContext(object):
         # self.cur.execute("PRAGMA count_changes=OFF")
         return self
 
+    def begin(self):
+        self.execute("BEGIN")
+
+    def rollback(self):
+        self.conn.rollback()
+
     def commit(self):
         if self.conn:
             try:
                 self.conn.commit()
             except Exception as e:
-                getLogger().exception("Cannot commit changes. e = %s" % e)
+                logging.getLogger(__name__).exception("Cannot commit changes. e = %s" % e)
+        else:
+            raise sqlite3.OperationalError("Connection was closed. commit() failed")    
 
     def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         ''' Support these keywords where, values, orderby, limit and columns'''
         query = self.schema.query_builder.build_select(table, where, orderby, limit, columns)
-        return table.to_table(self.execute(query, values), columns=columns)
+        if isinstance(table, Table):
+            return table.to_table(self.execute(query, values), columns=columns)
+        else:
+            return self.execute(query, values)
 
     def insert_record(self, table, values, columns=None):
         query = self.schema.query_builder.build_insert(table, values, columns)
@@ -440,11 +421,12 @@ class ExecutionContext(object):
 
     def delete_record(self, table, where=None, values=None):
         query = self.schema.query_builder.build_delete(table, where)
-        getLogger().debug("Executing: {q} | values={v}".format(q=query, v=values))
+        logging.getLogger(__name__).debug("Executing: {q} | values={v}".format(q=query, v=values))
         return self.execute(query, values)
 
     def select_object_by_id(self, table, ids, columns=None):
-        where = ' AND '.join(['{c}=?'.format(c=c) for c in table._id_cols])
+        _id_cols = table._id_cols if table._id_cols else ('rowid',)
+        where = ' AND '.join(['{c}=?'.format(c=c) for c in _id_cols])
         results = self.select_record(table, where, ids, columns=columns)
         if results:
             return results[0]
@@ -483,22 +465,28 @@ class ExecutionContext(object):
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         try:
-            getLogger().debug('Executing q={} | p={}'.format(query, params))
+            logging.getLogger(__name__).debug('Executing q={} | p={}'.format(query, params))
             if params:
-                return self.cur.execute(query, params)
+                _r = self.cur.execute(query, params)
             else:
-                return self.cur.execute(query)
-        except:
-            getLogger().exception('Invalid query. q={}, p={}'.format(query, params))
+                _r = self.cur.execute(query)
+            if self.auto_commit:
+                self.commit()
+            return _r
+        except Exception:
+            logging.getLogger(__name__).exception('Query failed: q={}, p={}'.format(query, params))
             raise
 
     def executescript(self, query):
-        return self.cur.executescript(query)
+        _r = self.cur.executescript(query)
+        if self.auto_commit:
+            self.auto_commit()
+        return _r
 
     def executefile(self, file_loc):
         with open(file_loc, 'r') as script_file:
             script_text = script_file.read()
-            self.executescript(script_text)
+            return self.executescript(script_text)
 
     def close(self):
         try:
@@ -506,26 +494,22 @@ class ExecutionContext(object):
                 if self.auto_commit:
                     self.commit()
                 self.conn.close()
-        except Exception as e:
-            getLogger().exception("Error while closing connection")
+                self.conn = None
+        except Exception:
+            logging.getLogger(__name__).exception("Error while closing connection")
         finally:
             self.conn = None
 
     def __getattr__(self, name):
-        if self.schema is None:
-            raise Exception("Invalid schema")
-        elif name in self.schema._tables:
+        if name in self.schema._tables:
             tbl = getattr(self.schema, name)
             ctx = TableContext(tbl, self)
             setattr(self, name, ctx)
             return getattr(self, name)
+        elif name in dir(self.schema):
+            return getattr(self.schema, name, None)
         else:
-            # try to get function from schema
-            _func = getattr(self.schema, name, None)
-            if _func is not None:
-                return _func
-            else:
-                raise AttributeError('Attribute {} does not exist'.format(name))
+            raise AttributeError('Attribute {} does not exist'.format(name))
 
     def __enter__(self):
         return self
@@ -534,17 +518,17 @@ class ExecutionContext(object):
         try:
             self.close()
         except Exception as e:
-            getLogger().exception("Error was raised while closing DB connection. e = %s" % e)
+            logging.getLogger(__name__).exception("Error was raised while closing DB connection. e = %s" % e)
 
 
 class Schema(object):
     ''' Contains schema definition of a database
     '''
-    def __init__(self, data_source, setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True, strict_mode=False):
+    def __init__(self, data_source=':memory:', setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True, strict_mode=False):
         if type(data_source) is DataSource:
-            self.data_source = data_source
+            self.__data_source = data_source
         else:
-            self.data_source = DataSource(db_path=data_source, schema=self, auto_expand_path=auto_expand_path)
+            self.__data_source = DataSource(db_path=data_source, schema=self, auto_expand_path=auto_expand_path)
         self.auto_commit = auto_commit
         self.setup_files = []
         if setup_file:
@@ -568,7 +552,7 @@ class Schema(object):
         ''' Add a new table design to this schema '''
         if not columns:
             columns = []
-        tbl_obj = Table(name, *columns, data_source=self.data_source, proto=proto, id_cols=id_cols, strict_mode=self._strict_mode, **field_map)
+        tbl_obj = Table(name, *columns, data_source=self.__data_source, proto=proto, id_cols=id_cols, strict_mode=self._strict_mode, **field_map)
         setattr(self, name, tbl_obj)
         self._tables[name] = tbl_obj
         if alias:
@@ -578,18 +562,25 @@ class Schema(object):
 
     @property
     def ds(self):
-        return self.data_source
+        return self.__data_source
 
     def ctx(self):
         ''' Create a new execution context '''
         return self.ds.open(schema=self)
 
+    def __getattr__(self, name):
+        # try to get function from default context
+        if hasattr(self.__data_source, name):
+            return getattr(self.__data_source, name)
+        raise AttributeError('Attribute {} does not exist'.format(name))
+
+
+# TODO: Will rename Schema to Database in future release
+Database = Schema
+
 
 def with_ctx(func=None):
     ''' Auto create a new context if not available '''
-    if not func:
-        return functools.partial(with_ctx)
-
     @functools.wraps(func)
     def func_with_context(_obj, *args, **kwargs):
         if 'ctx' not in kwargs or kwargs['ctx'] is None:

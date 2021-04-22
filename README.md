@@ -8,7 +8,7 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 
 ## Installation
 
-It is available on PyPI and can be installed using `pip`.
+It is available on [PyPI](https://pypi.org/project/puchikarui/) and can be installed using `pip`.
 
 ```bash
 pip install puchikarui
@@ -19,7 +19,7 @@ python3 -m pip install puchikarui
 ## Sample code
 
 ```python
-from puchikarui import Schema
+from puchikarui import Database
 
 INIT_SCRIPT = '''
 CREATE TABLE person (
@@ -29,26 +29,26 @@ CREATE TABLE person (
 );
 '''
 
-class PeopleDB(Schema):
-  def __init__(self, data_source, setup_script=INIT_SCRIPT):
-        Schema.__init__(self, data_source, setup_script=setup_script)
+class PeopleDB(Database):
+  def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_script(INIT_SCRIPT)
         self.add_table('person', ['ID', 'name', 'age'], id_cols=('ID',))
 
 
-s = PeopleDB('test.db')
-with s.ctx() as ctx:
-  people = ctx.person.select()
-  # create sample people records in the first run
-  if not people:
-    print("Creating people records ...")
-    for name, age in zip('ABCDE', range(20, 25)):
-      ctx.person.insert(f'Person {name}', age)
-    people = ctx.person.select()
+db = PeopleDB('test.db')
+people = db.person.select()
+# create sample people records in the first run
+if not people:
+  print("Creating people records ...")
+  for name, age in zip('ABCDE', range(20, 25)):
+    db.person.insert(f'Person {name}', age)
+  people = db.person.select()
 
-  print("All people")
-  print("----------------------")
-  for person in people:
-    print(person.ID, person.name, person.age)
+print("All people")
+print("----------------------")
+for person in people:
+  print(person.ID, person.name, person.age)
 ```
 
 For more examples please see `puchikarui.demo.py`
