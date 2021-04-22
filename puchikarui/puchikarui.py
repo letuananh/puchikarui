@@ -206,10 +206,7 @@ class DataSource:
     def __del__(self):
         logging.getLogger(__name__).debug("Destroying a data source")
         if self.__default_ctx_obj is not None:
-            try:
-                self.__default_ctx_obj.close()
-            except Exception:
-                logging.getLogger(__name__).exception("Error was raised while cleaning up database")
+            self.__default_ctx_obj.close()
 
     @property
     def path(self):
@@ -232,7 +229,7 @@ class DataSource:
         ''' Create a context to execute queries '''
         if schema is None:
             schema = self.schema
-        ac = auto_commit if auto_commit is not None else schema.auto_commit
+        ac = auto_commit if auto_commit is not None else schema.auto_commit if schema else None
         exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
         # setup DB if required
         if self.path:
@@ -244,7 +241,7 @@ class DataSource:
                         logging.getLogger(__name__).info("Executing script file: {}".format(file_path))
                         exe.cur.executescript(self.read_file(file_path))
                 # run setup scripts
-                if schema.setup_scripts:
+                if schema is not None and schema.setup_scripts:
                     for script in schema.setup_scripts:
                         exe.cur.executescript(script)
         return exe
@@ -257,9 +254,9 @@ class DataSource:
 
     def __getattr__(self, name):
         # try to get function from default context
-        _func = getattr(self.__default_ctx(), name, None)
-        if _func is not None:
-            return _func
+        _ctx = self.__default_ctx()
+        if hasattr(_ctx, name):
+            return getattr(_ctx, name)
         else:
             raise AttributeError('Attribute {} does not exist'.format(name))
 
@@ -327,7 +324,7 @@ class QueryBuilder(object):
         if where:
             query = "DELETE FROM {tbl} WHERE {where}".format(tbl=table.name, where=where)
         else:
-            query = "DELETE FROM {tbl}".format(tbl=self.name)
+            query = "DELETE FROM {tbl}".format(tbl=table.name)
         return query
 
 
@@ -368,7 +365,7 @@ class TableContext(object):
         else:
             # insert
             return self._context.insert_object(self._table, obj, columns, self._table._field_map)
-
+        
     def delete_obj(self, obj):
         return self._context.delete_object(self._table, obj)
 
@@ -402,6 +399,8 @@ class ExecutionContext(object):
                 self.conn.commit()
             except Exception as e:
                 logging.getLogger(__name__).exception("Cannot commit changes. e = %s" % e)
+        else:
+            raise sqlite3.OperationalError("Connection was closed. commit() failed")    
 
     def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         ''' Support these keywords where, values, orderby, limit and columns'''
@@ -436,10 +435,7 @@ class ExecutionContext(object):
 
     def insert_object(self, table, obj_data, columns=None, field_map=None):
         if not columns:
-            if isinstance(table, Table) and table.columns:
-                columns = table.columns
-            else:
-                columns = []
+            columns = table.columns
         values = tuple(getattr(obj_data, field_map[colname] if field_map and colname in field_map else colname) for colname in columns)
         self.insert_record(table, values, columns)
         return self.cur.lastrowid
@@ -574,9 +570,8 @@ class Schema(object):
 
     def __getattr__(self, name):
         # try to get function from default context
-        _func = getattr(self.__data_source, name, None)
-        if _func is not None:
-            return _func
+        if hasattr(self.__data_source, name):
+            return getattr(self.__data_source, name)
         raise AttributeError('Attribute {} does not exist'.format(name))
 
 
