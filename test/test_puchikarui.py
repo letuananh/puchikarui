@@ -47,6 +47,7 @@ import sqlite3
 from puchikarui import DataSource, ExecutionContext
 from puchikarui import Database, Schema, with_ctx
 from puchikarui import escape_like, head_like, tail_like, contain_like
+from puchikarui.puchikarui import to_obj, update_obj
 
 
 # ----------------------------------------------------------------------
@@ -116,6 +117,21 @@ class TestUtilClass(unittest.TestCase):
         ds = DataSource('~/tmp/test.db')
         self.assertEqual(expected_loc, ds.path)
 
+    def test_to_obj(self):
+        class Tool:
+            def __init__(self, name='', desc=''):
+                self.name = name
+                self.desc = desc
+
+            def to_dict(self):
+                return {'name': self.name, 'desc': self.desc}
+
+        obj_data = {'title': 'Ruler', 'purpose': 'For measuring', 'price': 5}
+        t = to_obj(Tool, obj_data, title='name')
+        self.assertEqual(t.to_dict(), {'name': 'Ruler', 'desc': ''})
+        update_obj(obj_data, t, purpose='desc')
+        self.assertEqual(t.to_dict(), {'name': 'Ruler', 'desc': 'For measuring'})
+
     def test_with_ctx(self):
         class CtxSchema(Schema):
             def __init__(self, *args, **kwargs):
@@ -136,6 +152,34 @@ class TestUtilClass(unittest.TestCase):
 
 class TestSchema(unittest.TestCase):
 
+    def test_null_schema(self):
+        # path = ''
+        ns = Schema('')
+        with ns.ctx() as ctx:
+            r = ctx.select("SELECT 42")
+            self.assertTrue(r)
+            self.assertEqual(r[0][0], 42)
+        # path = None
+        ns2 = Schema(None)
+        with ns2.ctx() as ctx:
+            r2 = ctx.select("SELECT 42 + 1")
+            print(ctx.conn, ns2.path)
+            self.assertTrue(r2)
+            self.assertEqual(r2[0][0], 43)
+            with self.assertLogs("puchikarui") as logs:
+                self.assertRaises(sqlite3.OperationalError, lambda: ctx.execute("INSERT INTO test VALUES(?, ?)", ("a person", 50)))
+                _found = False
+                for line in logs.output:
+                    if 'Query failed' in line:
+                        _found = True
+                        break
+                self.assertTrue(_found)
+        ns3 = Schema(":memory:", setup_script=None)
+        with ns3.ctx() as ctx:
+            r3 = ctx.select("SELECT 42 + 1")
+            self.assertTrue(r3)
+            self.assertEqual(r3[0][0], 43)
+    
     def test_bad_schema(self):
         class BadSchema(Schema):
             def __init__(self, *args, strict_mode=True, **kwargs):
@@ -292,6 +336,34 @@ class TestDemoLib(unittest.TestCase):
         pers = db.person.select(columns=('name',))
         names = [x.name for x in pers]
         self.assertEqual(names, ['Ji', 'Zen', 'Ka', 'Anh', 'Vi', 'Chun'])
+
+    def test_query_builder(self):
+        db = SchemaDemo()
+        db.person.delete('age > ?', (75,))
+        persons = db.person.select()
+        ages = [p.age for p in persons]
+        for p in persons:
+            p.age += 1
+            db.person.save(p, ('age',))
+        updated_ages = [p.age for p in db.person.select()]
+        self.assertEqual(ages, [28, 25, 32, 15, 33])
+        self.assertEqual(updated_ages, [29, 26, 33, 16, 34])
+        self.assertEqual(len(db.person.select()), 5)
+        # update back to before using update_record
+        for p in db.person.select():
+            p.age -= 1
+            db.update_record(db.person, (p.ID, p.name, p.age,), 'id = ?', (p.ID,))
+        updated_ages2 = [p.age for p in db.person.select()]
+        self.assertEqual(ages, updated_ages2)
+        # try insert_object
+        db.insert_object(db.person, Person('Boo Boo', 33))
+        db.insert_object("person", Person('Boo Boo 2', 34), columns=('name', 'age'))
+        self.assertEqual(len(db.person.select()), 7)
+        db.update_record(db.person, ('Smurf',), columns=('name',))
+        names = [p.name for p in db.person.select()]
+        self.assertEqual(names, ['Smurf'] * 7)
+        db.person.delete()
+        self.assertEqual(len(db.person.select()), 0)
 
     def test_orm_persistent(self):
         db = SchemaDemo(TEST_DB)
@@ -470,6 +542,18 @@ class TestWithContext(unittest.TestCase):
             self.assertEqual(len(persons_ctx1), 8)
             self.assertEqual(len(persons_ctx2), 7)
 
+    def test_mix_context(self):
+        db = SchemaDemo()
+        with db.ctx() as ctx:
+            p_tuple = ("Another P", 50)
+            id = ctx.person.insert(*p_tuple)
+            p = ctx.person.by_id(id)
+            p.name = "Another Person"
+            p.age = 51
+            db.person.save(p, ctx=ctx)  # update person info
+            p2 = db.person.select_single("id=?", (id,), ctx=ctx)
+            self.assertEqual((p.name, p.age), (p2.name, p2.age))
+
     def test_sep_context(self):
         ctx = ExecutionContext(':memory:', None)
         r = ctx.select('SELECT 2')
@@ -478,6 +562,13 @@ class TestWithContext(unittest.TestCase):
         ctx.close()
         self.assertIsNone(ctx.conn)
         ctx.close()
+        self.assertRaises(sqlite3.OperationalError, lambda: ctx.commit())
+
+    def test_del_ds(self):
+        db = SchemaDemo()
+        db.person.select()
+        db.close()
+        del db
 
     def test_default_context(self):
         db = SchemaDemo()
@@ -485,7 +576,8 @@ class TestWithContext(unittest.TestCase):
         persons = db.person.select()
         self.assertEqual(len(persons), 6)
         print("Create a new person")
-        db.person.save(Person("New Person", 50))
+        p = Person("New Person", 50)
+        id = db.person.save(p)
         self.assertEqual(len(db.person.select()), 7)
         # native query
         person_tuples = [tuple(p) for p in db.select('SELECT * FROM person')]
