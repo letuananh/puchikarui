@@ -1,0 +1,20 @@
+# Disable sudo to speed up the build
+sudo: false
+
+language: python
+python:
+    - "3.6"
+
+install:
+    - pip install codecov coverage
+
+unittests:
+    - pip install coverage
+    - coverage run --source puchikarui --branch -m unittest discover -s test
+
+script:
+  - coverage run --source puchikarui --branch -m unittest discover -s test
+
+# Push the results back to codecov
+after_success:
+  - codecov
