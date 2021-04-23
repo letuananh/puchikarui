@@ -204,7 +204,6 @@ class DataSource:
         self.__default_ctx_obj = None
 
     def __del__(self):
-        logging.getLogger(__name__).debug("Destroying a data source")
         if self.__default_ctx_obj is not None:
             self.__default_ctx_obj.close()
 
