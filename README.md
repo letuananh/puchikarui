@@ -67,7 +67,7 @@ If you want ORM features, please consider [PonyORM](https://ponyorm.org/), [SQLA
 
 ## Meaning
 
-The name `puchikarui` came from `プチ` (puchi) which means small, and `軽い` (karui), which means light, soft, and gentle.
+The name `puchikarui` came from two Japanese words `プチ` (puchi) which means small, and `軽い` (karui), which means light, soft, and gentle.
 
 It represents the motivation for developing this library: a tiny, lightweight library that makes working with `sqlite3` simpler.
 
