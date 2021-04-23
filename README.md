@@ -8,7 +8,7 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 
 ## Installation
 
-It is available on [PyPI](https://pypi.org/project/puchikarui/) and can be installed using `pip`.
+`puchikarui` is available on [PyPI](https://pypi.org/project/puchikarui/) and can be installed using `pip`.
 
 ```bash
 pip install puchikarui
@@ -58,8 +58,38 @@ python3 puchikarui.demo.py
 ```
 
 # Why puchikarui
-Although `puchikarui` does provide some ORM-like features, it is *NOT* an ORM library, 
-but a helper library that helps working directly SQLite databases more productive (less magic and more control).
 
-If you want ORM features, please consider https://github.com/coleifer/peewee or https://www.sqlalchemy.org/.
+`puchikarui` is a tiny, 100% pure-Python library that provides extra functionality to Python 3's [sqlite3](https://docs.python.org/3/library/sqlite3.html) module. 
+It helps working directly with `sqlite3` easier, with less magic, and more control, rather than hiding sqlite3 module away from the users.
 
+Although `puchikarui` does provide some ORM-like features, it is *NOT* an ORM library. 
+If you want ORM features, please consider [PonyORM](https://ponyorm.org/), [SQLAlchemy](https://www.sqlalchemy.org/), or [peewee](https://github.com/coleifer/peewee).
+
+# Meaning
+
+The name "puchikarui" came from "プチ" (puchi) which means small, and "軽い" (karui), which means light, soft, and gentle.
+
+It represents the motivation for developing this library: a tiny, lightweight library that makes working with `sqlite3` simpler.
+
+```bash
+$ python3 -m jamdict lookup "プチ"
+========================================
+Found entries
+========================================
+Entry: 1115200 | Kj:   | Kn: プチ
+--------------------
+1. small ((prefix))
+
+$ python3 -m jamdict lookup "軽い"
+========================================
+Found entries
+========================================
+Entry: 1252560 | Kj:  軽い | Kn: かるい, かろい
+--------------------
+1. light (i.e. not heavy)/feeling light (i.e. offering little resistance, moving easily) ((adjective (keiyoushi)))
+2. light (i.e. of foot)/effortless/nimble/agile ((adjective (keiyoushi)))
+3. non-serious/minor/unimportant/trivial ((adjective (keiyoushi)))
+4. slight/small/gentle/soft/easy/lighthearted (e.g. joke) ((adjective (keiyoushi)))
+5. easy/simple ((adjective (keiyoushi)))
+6. indiscriminate ((adjective (keiyoushi)))
+```
