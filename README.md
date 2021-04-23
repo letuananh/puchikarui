@@ -57,7 +57,7 @@ For more examples please see `puchikarui.demo.py`
 python3 puchikarui.demo.py
 ```
 
-# Why puchikarui
+## Why puchikarui
 
 `puchikarui` is a tiny, 100% pure-Python library that provides extra functionality to Python 3's [sqlite3](https://docs.python.org/3/library/sqlite3.html) module. 
 It helps working directly with `sqlite3` easier, with less magic, and more control, rather than hiding sqlite3 module away from the users.
@@ -65,9 +65,9 @@ It helps working directly with `sqlite3` easier, with less magic, and more contr
 Although `puchikarui` does provide some ORM-like features, it is *NOT* an ORM library. 
 If you want ORM features, please consider [PonyORM](https://ponyorm.org/), [SQLAlchemy](https://www.sqlalchemy.org/), or [peewee](https://github.com/coleifer/peewee).
 
-# Meaning
+## Meaning
 
-The name "puchikarui" came from "プチ" (puchi) which means small, and "軽い" (karui), which means light, soft, and gentle.
+The name `puchikarui` came from `プチ` (puchi) which means small, and `軽い` (karui), which means light, soft, and gentle.
 
 It represents the motivation for developing this library: a tiny, lightweight library that makes working with `sqlite3` simpler.
 
