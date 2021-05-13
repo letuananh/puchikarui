@@ -79,7 +79,7 @@ setup(
     include_package_data=True,
     platforms='any',
     classifiers=['Programming Language :: Python',
-                 'Development Status :: 3 - Alpha',
+                 'Development Status :: {}'.format(pkg_info['__status__']),
                  'Natural Language :: English',
                  'Environment :: Plugins',
                  'Intended Audience :: Developers',

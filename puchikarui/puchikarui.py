@@ -524,6 +524,8 @@ class Schema(object):
     ''' Contains schema definition of a database
     '''
     def __init__(self, data_source=':memory:', setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True, strict_mode=False):
+        if not data_source:
+            data_source = ':memory:'
         if type(data_source) is DataSource:
             self.__data_source = data_source
         else:
