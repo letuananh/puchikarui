@@ -3,6 +3,7 @@ Puchikarui
 
 A minimalist SQLite helper library for Python 3 which supports ORM features.
 
+[![Documentation Status](https://readthedocs.org/projects/puchikarui/badge/?version=latest)](https://puchikarui.readthedocs.io/en/latest/?badge=latest)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/letuananh/puchikarui.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/letuananh/puchikarui/alerts/)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/letuananh/puchikarui.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/letuananh/puchikarui/context:python)
 [![Build Status](https://travis-ci.org/letuananh/puchikarui.svg?branch=master)](https://travis-ci.org/letuananh/puchikarui)
