@@ -54,11 +54,7 @@ for person in people:
   print(person.ID, person.name, person.age)
 ```
 
-For more examples please see `puchikarui.demo.py`
-
-```bash
-python3 puchikarui.demo.py
-```
+For more information please see [puchikarui documentation](https://puchikarui.readthedocs.io>).
 
 ## Why puchikarui
 
