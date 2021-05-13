@@ -163,7 +163,6 @@ class TestSchema(unittest.TestCase):
         ns2 = Schema(None)
         with ns2.ctx() as ctx:
             r2 = ctx.select("SELECT 42 + 1")
-            print(ctx.conn, ns2.path)
             self.assertTrue(r2)
             self.assertEqual(r2[0][0], 43)
             with self.assertLogs("puchikarui") as logs:
