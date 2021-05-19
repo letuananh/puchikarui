@@ -275,7 +275,7 @@ class MemorySource(DataSource):
             schema = self.schema
         ac = auto_commit if auto_commit is not None else schema.auto_commit if schema else None
         if self.__conn is None:
-            logging.getLogger(__name__).info(f"Fetcing data into :memory: from file [{self.path}]")
+            logging.getLogger(__name__).info(f"Fetching database into :memory: from file [{self.path}]")
             # fetch from datasource
             source = sqlite3.connect(str(self.path))
             self.__conn = sqlite3.connect(":memory:")
