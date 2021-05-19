@@ -1,51 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-'''
+"""
 Script for testing puchikarui library
+"""
 
-Latest version can be found at https://github.com/letuananh/puchikarui
-
-References:
-    Python documentation:
-        https://docs.python.org/
-    Python unittest
-        https://docs.python.org/3/library/unittest.html
-
-@author: Le Tuan Anh <tuananh.ke@gmail.com>
-@license: MIT
-'''
-
-# Copyright (c) 2014-2017, Le Tuan Anh <tuananh.ke@gmail.com>
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-
-########################################################################
+# This source code is a part of puchikarui library: https://github.com/letuananh/puchikarui
+# Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
+# license: MIT
 
 import os
 import unittest
 import logging
 from pathlib import Path
-
+from datetime import datetime
 import sqlite3
 from puchikarui import DataSource, ExecutionContext
 from puchikarui import Database, Schema, with_ctx
+from puchikarui import MemorySource
 from puchikarui import escape_like, head_like, tail_like, contain_like
 from puchikarui.puchikarui import to_obj, update_obj
 
@@ -54,7 +26,7 @@ from puchikarui.puchikarui import to_obj, update_obj
 # Configuration
 # ----------------------------------------------------------------------
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 TEST_DIR = Path(os.path.abspath(os.path.dirname(__file__)))
 TEST_DATA = TEST_DIR / 'data'
 SETUP_FILE = TEST_DATA / 'init_script.sql'
@@ -136,7 +108,7 @@ class TestUtilClass(unittest.TestCase):
         class CtxSchema(Schema):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
-                self.add_script('''CREATE TABLE test(name TEXT, age INTEGER); INSERT INTO test VALUES ('a', 50)''')
+                self.add_script("""CREATE TABLE test(name TEXT, age INTEGER); INSERT INTO test VALUES ('a', 50)""")
                 self.add_table('test', 'name age'.split())
 
             @with_ctx
@@ -196,7 +168,7 @@ class TestSchema(unittest.TestCase):
         class NoSchema(Schema):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
-                self.add_script('''CREATE TABLE test(ID INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER);''')
+                self.add_script("""CREATE TABLE test(ID INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER);""")
         n = NoSchema()
         for name, age in zip('ABCDE', range(50, 55)):
             n.insert_record('test', (None, f'Person {name}', age))
@@ -261,6 +233,36 @@ class TestSchema(unittest.TestCase):
         school_obj = s.school.by_id(school.ID)
         self.assertEqual(school, school_obj)
         self.assertNotEqual(id(school), id(school_obj))
+
+
+class TestRamDB(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print("Setting up tests ...")
+        if os.path.isfile(TEST_DB):
+            logging.getLogger(__name__).info("Test DB exists, removing it now")
+            os.unlink(TEST_DB)
+
+    def test_memory_ds(self):
+        # prepare a sample DB
+        db = SchemaDemo(TEST_DB)
+        self.assertEqual(6, len(db.person.select()))
+        # now load it into RAM
+        db_ram = SchemaDemo(MemorySource(TEST_DB))
+        ctx = db_ram.open()
+        self.assertEqual(6, len(ctx.person.select()))
+        # insert new data
+        emacs_age = datetime.now().year - 1976
+        db_ram.person.insert("Emacs", emacs_age)
+        self.assertEqual(33, db_ram.person.by_id(5).age)
+        self.assertEqual("Emacs", db_ram.person.by_id(7).name)
+        self.assertEqual(emacs_age, db_ram.person.by_id(7).age)
+        # this should close the database
+        ctx = db_ram.open()
+        self.assertEqual(7, len(ctx.person.select()))
+        db_ram.close()
+        self.assertRaises(sqlite3.ProgrammingError, lambda: db_ram.person.select())
 
 
 class TestDemoLib(unittest.TestCase):
@@ -466,15 +468,15 @@ class Hobby(object):
 
 class SchemaAB(SchemaB, SchemaA):
 
-    ''' Execution order: setup_files > setup_scripts
+    """ Execution order: setup_files > setup_scripts
         Schema's file > SchemaA's file > SchemaB's file >
         Schema's script > SchemaA's script > SchemaB's script
         Note: The first class in inheritance list will be executed last
-    '''
+    """
 
     def __init__(self, data_source=":memory:", setup_script=None, setup_file=None):
         super().__init__(data_source=data_source, setup_script=setup_script, setup_file=setup_file)
-        self.add_script('''INSERT INTO person_hobby VALUES ((SELECT ID FROM hobby WHERE name='magic'), (SELECT ID FROM person WHERE name='potter'));''')
+        self.add_script("""INSERT INTO person_hobby VALUES ((SELECT ID FROM hobby WHERE name='magic'), (SELECT ID FROM person WHERE name='potter'));""")
 
     @with_ctx
     def all_hobby(self, ctx=None):
