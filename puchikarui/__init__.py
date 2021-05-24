@@ -37,9 +37,11 @@ from .__version__ import __author__, __email__, __copyright__, __maintainer__
 from .__version__ import __credits__, __license__, __description__, __url__
 from .__version__ import __version_major__, __version_long__, __version__, __status__
 
-from .puchikarui import Database, Schema, ExecutionContext, DataSource, Table, with_ctx
+from .puchikarui import Database, Schema, ExecutionContext, Table, with_ctx
+from .puchikarui import DataSource, MemorySource
 # helpers
 from .puchikarui import escape_like, head_like, tail_like, contain_like
 
-__all__ = ["Schema", "ExecutionContext", "DataSource", "Table", "with_ctx",
+__all__ = ["Schema", "Table", "ExecutionContext",
+           "DataSource", "MemorySource", "with_ctx",
            "__version__", "__author__", "__description__", "__copyright__"]
