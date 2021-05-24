@@ -19,8 +19,7 @@ from puchikarui import DataSource, ExecutionContext
 from puchikarui import Database, Schema, with_ctx
 from puchikarui import MemorySource
 from puchikarui import escape_like, head_like, tail_like, contain_like
-from puchikarui.puchikarui import to_obj, update_obj
-
+from puchikarui.puchikarui import to_obj, update_obj, QueryBuilder
 
 # ----------------------------------------------------------------------
 # Configuration
@@ -92,6 +91,11 @@ class TestUtilClass(unittest.TestCase):
         expected_loc = os.path.join(my_home, 'tmp', 'test.db')
         ds = DataSource('~/tmp/test.db')
         self.assertEqual(expected_loc, ds.path)
+        
+    def test_query_builder(self):
+        q = QueryBuilder.build_update_record("person", "age > ?", "name age")
+        expected = "UPDATE person SET name=?, age=? WHERE age > ?"
+        self.assertEqual(expected, q)
 
     def test_to_obj(self):
         class Tool:
@@ -132,13 +136,13 @@ class TestSchema(unittest.TestCase):
         # path = ''
         ns = Schema('')
         with ns.ctx() as ctx:
-            r = ctx.select("SELECT 42")
+            r = ctx.query_all("SELECT 42")
             self.assertTrue(r)
             self.assertEqual(r[0][0], 42)
         # path = None
         ns2 = Schema(None)
         with ns2.ctx() as ctx:
-            r2 = ctx.select("SELECT 42 + 1")
+            r2 = ctx.query_all("SELECT 42 + 1")
             self.assertTrue(r2)
             self.assertEqual(r2[0][0], 43)
             with self.assertLogs("puchikarui") as logs:
@@ -151,7 +155,7 @@ class TestSchema(unittest.TestCase):
                 self.assertTrue(_found)
         ns3 = Schema(":memory:", setup_script=None)
         with ns3.ctx() as ctx:
-            r3 = ctx.select("SELECT 42 + 1")
+            r3 = ctx.query_all("SELECT 42 + 1")
             self.assertTrue(r3)
             self.assertEqual(r3[0][0], 43)
     
@@ -176,7 +180,7 @@ class TestSchema(unittest.TestCase):
         n = NoSchema()
         for name, age in zip('ABCDE', range(50, 55)):
             n.insert_record('test', (None, f'Person {name}', age))
-        rows = [(row['ID'], row['name'], row['age']) for row in n.select_record('test', where='age >= ?', values=(51,))]
+        rows = [(row['ID'], row['name'], row['age']) for row in n.select('test', where='age >= ?', values=(51,))]
         expected = [(2, 'Person B', 51), (3, 'Person C', 52), (4, 'Person D', 53), (5, 'Person E', 54)]
         self.assertEqual(rows, expected)
 
@@ -192,7 +196,7 @@ class TestSchema(unittest.TestCase):
                     {'ID': 9, 'name': 'Odin', 'age': 10000}]
         self.assertEqual(expected, elders)
         # test select all
-        ages = [x[0] for x in ctx.select_all("SELECT age FROM person WHERE age > 1000")]
+        ages = [x[0] for x in ctx.execute("SELECT age FROM person WHERE age > 1000")]
         self.assertEqual([3722, 1503, 10000], ages)
         names = [p.name for p in schema.person.select_iter("age > 1000", ctx=ctx)]
         expected = ['Zeus', 'Thor', 'Odin']
@@ -208,8 +212,10 @@ class TestSchema(unittest.TestCase):
         schema.person.update("age = age + 1")
         schema.person.update("age = age + 1", "age > 1000")
         schema.update("person", "age = age + 1", "age > 1000")
-        ages = [x[0] for x in ctx.select_all("SELECT age FROM person WHERE age > 1000")]
+        ages = [x[0] for x in ctx.execute("SELECT age FROM person WHERE age > 1000")]
         self.assertEqual([3727, 1508, 10005], ages)
+        for r in ctx.person.to_table(ctx.select_iter("person", "age > 1000", columns="ID name age")):
+            print(r)
 
     def test_memory_source_no_schema(self):
         if TEST_DB.is_file():
@@ -218,23 +224,23 @@ class TestSchema(unittest.TestCase):
         schema.open().close()  # touch the database to force create
         ds = DataSource(TEST_DB)
         ctx = ds.open(auto_commit=None)
-        ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
+        ids = {id for (id,) in ctx.double(row_factory=None).execute("SELECT ID FROM Person")}
         expected = {1, 2, 3, 4, 5, 6}
         self.assertEqual(expected, ids)
         # test the same thing for MemorySource without schema
         mem_source = MemorySource(TEST_DB)
         ctx = mem_source.open()
-        ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
+        ids = {id for (id,) in ctx.double(row_factory=None).execute("SELECT ID FROM Person")}
         expected = {1, 2, 3, 4, 5, 6}
         self.assertEqual(expected, ids)
         # test select without schema
-        recs = ctx.select_record_iter("person", "id > 3")
+        recs = ctx.select_iter("person", "id > 3")
         for r in recs:
             print(r)
         # test MemorySource with schema
         mem_source = MemorySource(TEST_DB)
         ctx = mem_source.open(schema=schema, force_iterdump=True)
-        ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
+        ids = {id for (id,) in ctx.double(row_factory=None).execute("SELECT ID FROM Person")}
         expected = {1, 2, 3, 4, 5, 6}
         self.assertEqual(expected, ids)
 
@@ -248,8 +254,14 @@ class TestSchema(unittest.TestCase):
         self.assertEqual(expected, rows)
         db.buckmode()
         db.begin()
-        for i in range(1, 1001):
+        for i in range(1, 200):
             db.person.insert(f"Person {i}", i)
+        for i in range(200, 400):
+            db.insert("person", name=f"Person {i}", age=i)
+        for i in range(400, 500):
+            db.insert("person", {'name': f"Person {i}", 'age': i})
+        for i in range(500, 1001):
+            db.insert("person", {'name':f"Person {i}"}, columns="name age", age=i)
         db.commit()
         db.commit()
         persons = db.person.select()
@@ -310,7 +322,7 @@ class TestSchema(unittest.TestCase):
         self.assertIsInstance(h, tuple)
         school = s.school.select_single()  # first object
         # test to_obj
-        objs = s.select_record(s.school)  # all records
+        objs = s.select(s.school)  # all records
         self.assertEqual(school, objs[0])
         # select tuple by id (no proto)
         school_obj = s.school.by_id(school.ID)
@@ -386,11 +398,11 @@ class TestDemoLib(unittest.TestCase):
 
     def test_sqlite_methods(self):
         db = SchemaDemo()
-        num = db.ds.select_scalar('SELECT 2')
+        num = db.ds.query_scalar('SELECT 2')
         self.assertEqual(num, 2)
-        nums = db.ds.select_single('SELECT 2, 3, 4')
+        nums = db.ds.query_row('SELECT 2, 3, 4')
         self.assertEqual(tuple(nums), (2, 3, 4))
-        matrix = db.ds.select('SELECT 1, 2, 3 UNION SELECT 4, 5, 6')
+        matrix = db.ds.query_all('SELECT 1, 2, 3 UNION SELECT 4, 5, 6')
         self.assertEqual(tuple(tuple(row) for row in matrix), ((1, 2, 3), (4, 5, 6)))
 
     def test_basic(self):
@@ -667,8 +679,8 @@ class TestWithContext(unittest.TestCase):
 
     def test_sep_context(self):
         ctx = ExecutionContext(':memory:', None)
-        r = ctx.select('SELECT 2')
-        self.assertEqual(r[0][0], 2)
+        r = ctx.query_scalar('SELECT 2')
+        self.assertEqual(r, 2)
         self.assertIsNotNone(ctx.conn)
         ctx.close()
         self.assertIsNone(ctx.conn)
@@ -691,8 +703,8 @@ class TestWithContext(unittest.TestCase):
         id = db.person.save(p)
         self.assertEqual(len(db.person.select()), 7)
         # native query
-        person_tuples = [tuple(p) for p in db.select('SELECT * FROM person')]
-        person_dicts = [dict(p) for p in db.select('SELECT * FROM person')]
+        person_tuples = [tuple(p) for p in db.query_all('SELECT * FROM person')]
+        person_dicts = [dict(p) for p in db.query_all('SELECT * FROM person')]
         expected_tuples = [(1, 'Ji', 28),
                            (2, 'Zen', 25),
                            (3, 'Ka', 32),
