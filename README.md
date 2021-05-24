@@ -9,16 +9,6 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 [![Build Status](https://travis-ci.org/letuananh/puchikarui.svg?branch=master)](https://travis-ci.org/letuananh/puchikarui)
 [![codecov](https://codecov.io/gh/letuananh/puchikarui/branch/master/graph/badge.svg?token=10CEOU8F8M)](https://codecov.io/gh/letuananh/puchikarui)
 
-## Installation
-
-`puchikarui` is available on [PyPI](https://pypi.org/project/puchikarui/) and can be installed using `pip`.
-
-```bash
-pip install puchikarui
-# or with python -m pip
-python3 -m pip install puchikarui
-```
-
 ## Sample code
 
 ```python
@@ -36,7 +26,7 @@ class PeopleDB(Database):
   def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_script(INIT_SCRIPT)
-        self.add_table('person', ['ID', 'name', 'age'], id_cols=('ID',))
+        self.add_table('person', 'ID name age', id_cols='ID')
 
 
 db = PeopleDB('test.db')
@@ -56,6 +46,14 @@ for person in people:
 
 For more information please see [puchikarui documentation](https://puchikarui.readthedocs.io>).
 
+## Installation
+
+`puchikarui` is available on [PyPI](https://pypi.org/project/puchikarui/) and can be installed using `pip`.
+
+```bash
+pip install puchikarui
+```
+
 ## Why puchikarui
 
 `puchikarui` is a tiny, 100% pure-Python library that provides extra functionality to Python 3's [sqlite3](https://docs.python.org/3/library/sqlite3.html) module. 
@@ -63,6 +61,13 @@ It helps working directly with `sqlite3` easier, with less magic, and more contr
 
 Although `puchikarui` does provide some ORM-like features, it is *NOT* an ORM library. 
 If you want ORM features, please consider [PonyORM](https://ponyorm.org/), [SQLAlchemy](https://www.sqlalchemy.org/), or [peewee](https://github.com/coleifer/peewee).
+
+### Features
+
+- Working with simple usecases is simple, just create a new database object with `db = Database('file.db')` and start working
+- Database can be loaded into memory before querying for boosting up performance
+- Flexible execution context management, auto create, use, and close connections and cursors
+- It's simple to define database schemas
 
 ## Meaning
 
