@@ -77,9 +77,13 @@ class Person(object):
     def __str__(self):
         return "#{}: {}/{}".format(self.ID, self.name, self.age)
 
+    def to_dict(self):
+        return {'ID': self.ID,
+                'name': self.name,
+                'age': self.age}
+
 
 ########################################################################
-
 
 class TestUtilClass(unittest.TestCase):
 
@@ -176,6 +180,79 @@ class TestSchema(unittest.TestCase):
         expected = [(2, 'Person B', 51), (3, 'Person C', 52), (4, 'Person D', 53), (5, 'Person E', 54)]
         self.assertEqual(rows, expected)
 
+    def test_execute_file(self):
+        schema = SchemaDemo()
+        schema.executefile(TEST_DATA / 'test_insert_script.sql')
+        ctx = schema.double(auto_commit=False, row_factory=None)
+        ctx.executescript("""INSERT INTO person (name, age) VALUES ('Odin', 10000);""")
+        ctx.commit()
+        elders = [p.to_dict() for p in schema.person.select("age > ?", (1000,))]
+        expected = [{'ID': 7, 'name': 'Zeus', 'age': 3722},
+                    {'ID': 8, 'name': 'Thor', 'age': 1503},
+                    {'ID': 9, 'name': 'Odin', 'age': 10000}]
+        self.assertEqual(expected, elders)
+        # test select all
+        ages = [x[0] for x in ctx.select_all("SELECT age FROM person WHERE age > 1000")]
+        self.assertEqual([3722, 1503, 10000], ages)
+        names = [p.name for p in schema.person.select_iter("age > 1000", ctx=ctx)]
+        expected = ['Zeus', 'Thor', 'Odin']
+        self.assertEqual(expected, names)
+        # update their ages
+        for p in schema.person.select_iter():
+            p.age += 2
+            schema.person.update(
+            schema.person.update("age = age + 2", "age > ?", (1000,))
+        ages = [x[0] for x in ctx.select_all("SELECT age FROM person WHERE age > 1000")]
+        self.assertEqual([3722, 1503, 10000], ages)
+
+    def test_memory_source_no_schema(self):
+        if TEST_DB.is_file():
+            TEST_DB.unlink()
+        schema = SchemaDemo(TEST_DB)  # build the database
+        schema.open().close()  # touch the database to force create
+        ds = DataSource(TEST_DB)
+        ctx = ds.open(auto_commit=None)
+        ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
+        expected = {1, 2, 3, 4, 5, 6}
+        self.assertEqual(expected, ids)
+        # test the same thing for MemorySource without schema
+        mem_source = MemorySource(TEST_DB)
+        ctx = mem_source.open()
+        ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
+        expected = {1, 2, 3, 4, 5, 6}
+        self.assertEqual(expected, ids)
+        # test select without schema
+        recs = ctx.select_record_iter("person", "id > 3")
+        for r in recs:
+            print(r)
+        # test MemorySource with schema
+        mem_source = MemorySource(TEST_DB)
+        ctx = mem_source.open(schema=schema)
+        ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
+        expected = {1, 2, 3, 4, 5, 6}
+        self.assertEqual(expected, ids)
+
+    def test_buckmode(self):
+        db = SchemaDemo()
+        rows = []
+        for p in db.person.select_iter():
+            rows.append((p.ID, p.name, p.age))
+        expected = [(1, 'Ji', 28), (2, 'Zen', 25), (3, 'Ka', 32),
+                    (4, 'Anh', 15), (5, 'Vi', 33), (6, 'Chun', 78)]
+        self.assertEqual(expected, rows)
+        db.buckmode()
+        db.begin()
+        for i in range(1, 1001):
+            db.person.insert(f"Person {i}", i)
+        db.commit()
+        db.commit()
+        persons = db.person.select()
+        self.assertEqual(1006, len(persons))
+        actual = [(p.ID, p.name, p.age) for p in
+                  (db.person.by_id(7), db.person.by_id(1006))]
+        expected = [(7, 'Person 1', 1), (1006, 'Person 1000', 1000)]
+        self.assertEqual(expected, actual)
+
     def test_accessing_weird_attr(self):
         s = SchemaDemo()
         self.assertRaises(AttributeError, lambda: s.boo())
@@ -234,14 +311,32 @@ class TestSchema(unittest.TestCase):
         self.assertEqual(school, school_obj)
         self.assertNotEqual(id(school), id(school_obj))
 
-    def test_multiple_cursor(self):
+    def test_multiple_cursors(self):
         db = SchemaDemo()
         with db.ctx() as ctx:
-            select_cur = ctx.conn.cursor()
-            names = [ctx.person.by_id(p['ID']).name
-                     for p in select_cur.execute("SELECT ID from person")]
+            select_cur = ctx.double(row_factory=None)
+            names = [ctx.person.by_id(pid[0]).name
+                     for pid in select_cur.execute("SELECT ID from person")]
             expected = ['Ji', 'Zen', 'Ka', 'Anh', 'Vi', 'Chun']
             self.assertEqual(expected, names)
+
+    def test_execution_context_status(self):
+        db = SchemaDemo()
+        ctx_outside = db.ctx()
+        self.assertTrue(ctx_outside.is_open)
+        with db.ctx() as ctx:
+            self.assertTrue(ctx.is_open)
+            ctx.close()
+            self.assertFalse(ctx.is_open)
+            self.assertTrue(ctx_outside.is_open)
+            ctx.close()
+            self.assertFalse(ctx.is_open)
+            self.assertTrue(ctx_outside.is_open)
+        self.assertTrue(ctx_outside.is_open)
+        ctx_outside.close()
+        self.assertFalse(ctx_outside.is_open)
+        ctx_outside.close()
+        self.assertFalse(ctx_outside.is_open)
 
 
 class TestRamDB(unittest.TestCase):
