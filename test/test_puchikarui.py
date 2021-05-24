@@ -43,10 +43,10 @@ class SchemaDemo(Schema):
 
     def __init__(self, data_source=':memory:', setup_script=SETUP_SCRIPT, setup_file=SETUP_FILE, *args, **kwargs):
         Schema.__init__(self, data_source=data_source, setup_script=setup_script, setup_file=setup_file)
-        self.add_table('person', ['ID', 'name', 'age'], proto=Person, id_cols=('ID',))
+        self.add_table('person', ['ID', 'name', 'age'], proto=Person, id_cols='ID')
         self.add_table('hobby').add_fields('pid', 'hobby')
         self.add_table('school', alias='college').add_fields('ID', 'name', 'address')
-        self.add_table('diary', ['ID', 'pid', 'text']).set_proto(Diary).set_id('ID').field_map(pid='ownerID', text='content')
+        self.add_table('diary', 'ID pid text').set_proto(Diary).set_id('ID').field_map(pid='ownerID', text='content')
 
 
 class Diary(object):
