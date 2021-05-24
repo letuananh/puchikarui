@@ -262,6 +262,15 @@ class TestSchema(unittest.TestCase):
         self.assertEqual(school, school_obj)
         self.assertNotEqual(id(school), id(school_obj))
 
+    def test_multiple_cursor(self):
+        db = SchemaDemo()
+        with db.ctx() as ctx:
+            select_cur = ctx.conn.cursor()
+            names = [ctx.person.by_id(p['ID']).name
+                     for p in select_cur.execute("SELECT ID from person")]
+            expected = ['Ji', 'Zen', 'Ka', 'Anh', 'Vi', 'Chun']
+            self.assertEqual(expected, names)
+
 
 class TestDemoLib(unittest.TestCase):
 
