@@ -18,6 +18,7 @@ import functools
 # -------------------------------------------------------------
 # Helper functions
 # -------------------------------------------------------------
+from collections import Mapping
 from typing import Sequence
 
 
@@ -153,28 +154,20 @@ class Table:
         return getattr(self._data_source, self.name)
 
     def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
-        else:
-            return self.__ds_ctx().select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.select_single(where=where, values=values, orderby=orderby, limit=limit, columns=columns)
 
     def select(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).select(where, values, orderby=orderby, limit=limit, columns=columns)
-        else:
-            return self.__ds_ctx().select(where, values, orderby=orderby, limit=limit, columns=columns)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.select(where, values, orderby=orderby, limit=limit, columns=columns)
 
     def select_iter(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).select_iter(where, values, orderby=orderby, limit=limit, columns=columns)
-        else:
-            return self.__ds_ctx().select_iter(where, values, orderby=orderby, limit=limit, columns=columns)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.select_iter(where, values, orderby=orderby, limit=limit, columns=columns)
 
     def insert(self, *values, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).insert(*values, columns=columns)
-        else:
-            return self.__ds_ctx().insert(*values, columns=columns)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.insert(*values, columns=columns)
 
     def delete(self, where=None, values=None, ctx=None):
         ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
@@ -310,6 +303,8 @@ class QueryBuilder(object):
     @classmethod
     def build_select(cls, table, where=None, orderby=None, limit=None, columns=None) -> str:
         query = []
+        if isinstance(columns, str):
+            columns = columns.split()
         if isinstance(table, Table):
             if not columns:
                 columns = table.columns
@@ -340,6 +335,8 @@ class QueryBuilder(object):
                 columns = table.columns
         else:
             table_name = str(table)
+        if isinstance(columns, str):
+            columns = columns.split()
         if columns:
             if len(values) < len(columns):
                 column_names = ','.join(columns[-len(values):])
@@ -356,6 +353,8 @@ class QueryBuilder(object):
         if columns is None:
             columns = table.columns
         set_fields = []
+        if isinstance(columns, str):
+            columns = columns.split()
         for col in columns:
             set_fields.append("{c}=?".format(c=col))
         if where:
@@ -386,19 +385,19 @@ class TableContext(object):
     def __init__(self, table, context):
         self._table = table
         self._context: ExecutionContext = context
+        
+    def to_table(self, *args, **kwargs):
+        return self._table.to_table(*args, **kwargs)
 
     def select(self, where=None, values=None, **kwargs):
-        return self._context.select_record(self._table, where, values, **kwargs)
+        return self._context.select(self._table, where, values, **kwargs)
 
     def select_iter(self, where=None, values=None, **kwargs):
-        return self._context.select_record_iter(self._table, where, values, **kwargs)
+        return self._context.select_iter(self._table, where, values, **kwargs)
 
     def select_single(self, where=None, values=None, **kwargs):
-        result = self._context.select_record(self._table, where, values, **kwargs)
-        if result and len(result) > 0:
-            return result[0]
-        else:
-            return None
+        result = next(self._context.select_iter(self._table, where, values, **kwargs), None)
+        return result
 
     def insert(self, *values, columns=None):
         return self._context.insert_record(self._table, values, columns)
@@ -490,15 +489,15 @@ class ExecutionContext(object):
         else:
             raise sqlite3.OperationalError("Connection was closed. commit() failed")
 
-    def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
+    def select(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         """ Support these keywords where, values, orderby, limit and columns"""
-        query = QueryBuilder.build_select(table, where, orderby, limit, columns)
         if isinstance(table, Table):
-            return table.to_table(self.execute(query, values), columns=columns)
+            return tuple(x for x in self.select_iter(table, where, values, orderby, limit, columns))
         else:
-            return self.execute(query, values)
+            query = QueryBuilder.build_select(table, where, orderby, limit, columns)
+            return self.execute(query, values).fetchall()
 
-    def select_record_iter(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
+    def select_iter(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         """ Support these keywords where, values, orderby, limit and columns"""
         query = QueryBuilder.build_select(table, where, orderby, limit, columns)
         if isinstance(table, Table):
@@ -507,10 +506,21 @@ class ExecutionContext(object):
         else:
             return self.execute(query, values)
 
-    def insert_record(self, table, values, columns=None):
+    def insert(self, table, values=None, columns=None, **kwargs):
+        if values is None:
+            values = kwargs
+        if isinstance(values, Mapping):
+            if kwargs:
+                values.update(kwargs)
+            if columns is None:
+                columns = values.keys()
+            values = tuple(values.values())
         query = QueryBuilder.build_insert(table, values, columns)
         self.execute(query, values)
         return self.cur.lastrowid
+
+    def insert_record(self, *args, **kwargs):
+        return self.insert(*args, **kwargs)
 
     def update_record(self, table, new_values, where='', where_values=None, columns=None):
         query = QueryBuilder.build_update_record(table, where, columns)
@@ -524,14 +534,10 @@ class ExecutionContext(object):
     def select_object_by_id(self, table, ids, columns=None):
         _id_cols = table._id_cols if table._id_cols else ('rowid',)
         where = ' AND '.join(['{c}=?'.format(c=c) for c in _id_cols])
-        results = self.select_record(table, where, ids, columns=columns)
-        if results:
-            return results[0]
-        else:
-            return None
+        return next(self.select_iter(table, where, ids, columns=columns), None)
 
     def insert_object(self, table, obj_data, columns=None, field_map=None):
-        if not columns:
+        if not columns and isinstance(table, Table):
             columns = table.columns
         values = tuple(getattr(obj_data, field_map[colname] if field_map and colname in field_map else colname) for colname in columns)
         self.insert_record(table, values, columns)
@@ -550,25 +556,17 @@ class ExecutionContext(object):
         where_values = tuple(getattr(obj_data, colname) for colname in table._id_cols)
         self.delete_record(table, where, where_values)
 
-    def select(self, query, params=None):
-        """ Select and fetch all rows """
-        # TODO: default to select_iter from ver 0.3 for better performance?
-        return self.execute(query, params).fetchall()
-
-    def select_all(self, query, params=None):
-        """ Select and fetch all rows """
-        return self.execute(query, params).fetchall()
-
-    def select_single(self, query, params=None):
+    def query_row(self, query, params=None):
         """ Select, fetch, and return the first row """
         return self.execute(query, params).fetchone()
+    
+    def query_all(self, query, params=None):
+        """ Select, fetch and return all rows """
+        return self.execute(query, params).fetchall()
 
-    def select_scalar(self, query, params=None):
+    def query_scalar(self, query, params=None):
         """ Select, fetch and return the first value of the first row """
-        return self.select_single(query, params)[0]
-
-    def select_iter(self, query, params=None):
-        return self.execute(query, params)
+        return self.query_row(query, params)[0]
 
     def update(self, table, set_expr, where='', values=None):
         query = QueryBuilder.build_update(table, set_expr, where=where)
