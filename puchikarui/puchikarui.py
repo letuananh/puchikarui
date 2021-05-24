@@ -156,6 +156,12 @@ class Table:
         else:
             return self.__ds_ctx().select(where, values, orderby=orderby, limit=limit, columns=columns)
 
+    def select_iter(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
+        if ctx is not None:
+            return self.ctx(ctx).select_iter(where, values, orderby=orderby, limit=limit, columns=columns)
+        else:
+            return self.__ds_ctx().select_iter(where, values, orderby=orderby, limit=limit, columns=columns)
+
     def insert(self, *values, columns=None, ctx=None):
         if ctx is not None:
             return self.ctx(ctx).insert(*values, columns=columns)
@@ -241,12 +247,13 @@ class DataSource:
         """ Create a context to execute queries """
         if schema is None:
             schema = self.schema
-        ac = auto_commit if auto_commit is not None else schema.auto_commit if schema else None
-        exe = ExecutionContext(self.path, schema=schema, auto_commit=ac)
+        if auto_commit is None and schema is not None:
+            auto_commit = schema.auto_commit
+        exe = ExecutionContext(self.path, schema=schema, auto_commit=auto_commit)
         # setup DB if required
-        if self.path:
-            if str(self.path) == ':memory:' or not os.path.isfile(self.path) or os.path.getsize(self.path) == 0:
-                self._setup(exe, schema)
+        if self.path and (str(self.path) == ':memory:' or
+                          not os.path.isfile(self.path) or os.path.getsize(self.path) == 0):
+            self._setup(exe, schema)
         return exe
 
     def __default_ctx(self):
@@ -273,7 +280,8 @@ class MemorySource(DataSource):
     def open(self, auto_commit=None, schema=None, force_iterdump=False, **kwargs):
         if schema is None:
             schema = self.schema
-        ac = auto_commit if auto_commit is not None else schema.auto_commit if schema else None
+        if auto_commit is None and schema is not None:
+            auto_commit = schema.auto_commit
         if self.__conn is None:
             logging.getLogger(__name__).info(f"Fetching database into :memory: from file [{self.path}]")
             # fetch from datasource
@@ -288,7 +296,7 @@ class MemorySource(DataSource):
                 # use backup if possible
                 source.backup(self.__conn)
             source.close()
-        return ExecutionContext(self.__conn, schema=schema, auto_commit=ac)
+        return ExecutionContext(self.__conn, schema=schema, auto_commit=auto_commit)
 
 
 class QueryBuilder(object):
@@ -297,7 +305,8 @@ class QueryBuilder(object):
     def __init__(self, schema):
         self.schema = schema
 
-    def build_select(self, table, where=None, orderby=None, limit=None, columns=None):
+    @classmethod
+    def build_select(cls, table, where=None, orderby=None, limit=None, columns=None):
         query = []
         if isinstance(table, Table):
             if not columns:
@@ -320,7 +329,8 @@ class QueryBuilder(object):
             query.append(str(limit))
         return ''.join(query)
 
-    def build_insert(self, table, values, columns=None):
+    @classmethod
+    def build_insert(cls, table, values, columns=None):
         """ Insert an active record into DB and return lastrowid if available """
         if isinstance(table, Table):
             table_name = table.name
@@ -338,7 +348,8 @@ class QueryBuilder(object):
             query = "INSERT INTO %s VALUES (%s) " % (table_name, ','.join(['?'] * len(values)))
         return query
 
-    def build_update(self, table, where='', columns=None):
+    @classmethod
+    def build_update(cls, table, where='', columns=None):
         if columns is None:
             columns = table.columns
         set_fields = []
@@ -350,7 +361,8 @@ class QueryBuilder(object):
             query = 'UPDATE {t} SET {sf}'.format(t=table.name, sf=', '.join(set_fields))
         return query
 
-    def build_delete(self, table, where=None):
+    @classmethod
+    def build_delete(cls, table, where=None):
         if where:
             query = "DELETE FROM {tbl} WHERE {where}".format(tbl=table.name, where=where)
         else:
@@ -365,6 +377,9 @@ class TableContext(object):
 
     def select(self, where=None, values=None, **kwargs):
         return self._context.select_record(self._table, where, values, **kwargs)
+
+    def select_iter(self, where=None, values=None, **kwargs):
+        return self._context.select_record_iter(self._table, where, values, **kwargs)
 
     def select_single(self, where=None, values=None, **kwargs):
         result = self._context.select_record(self._table, where, values, **kwargs)
@@ -403,18 +418,38 @@ class TableContext(object):
 class ExecutionContext(object):
     """ Create a context to work with a schema which closes connection when destroyed
     """
-    def __init__(self, source, schema, auto_commit=True):
+    def __init__(self, source, schema: 'Database',
+                 auto_commit=True, row_factory=sqlite3.Row):
         if isinstance(source, sqlite3.Connection):
             # reuse connection object
             self.conn = source
         else:
             # create a new connection object
             self.conn = sqlite3.connect(str(source))
-        self.conn.row_factory = sqlite3.Row
+        if row_factory is not None:
+            self.conn.row_factory = row_factory
         self.cur = self.conn.cursor()
         self.schema = schema
         self.auto_commit = auto_commit
         self.__closed = False
+
+    def double(self, **kwargs) -> 'ExecutionContext':
+        """ Create a parallel execution context object with a different cursor
+
+        Note: The connection object and schema are identical to the source execution context.
+        This function is helpful when multiple cursors are needed at the same time,
+        for example:
+
+        >>> with db.ctx() as ctx:
+        ...     for id in ctx.double(row_factory=None).execute("SELECT id FROM person"):
+        ...         p = ctx.person.by_id(id)
+        ...         # more complex queries go here ...
+        """
+        return ExecutionContext(self.conn, self.schema, **kwargs)
+
+    @property
+    def is_open(self):
+        return not self.__closed
 
     def buckmode(self):
         """ Optimized setting for buck insert
@@ -435,33 +470,39 @@ class ExecutionContext(object):
 
     def commit(self):
         """ Commit changes made in current transaction """
-        if not self.__closed and self.conn and self.auto_commit:
-            try:
-                self.conn.commit()
-            except Exception as e:
-                logging.getLogger(__name__).exception("Cannot commit changes. e = %s" % e)
+        if self.is_open and self.conn is not None:
+            self.conn.commit()
         else:
             raise sqlite3.OperationalError("Connection was closed. commit() failed")
 
     def select_record(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         """ Support these keywords where, values, orderby, limit and columns"""
-        query = self.schema.query_builder.build_select(table, where, orderby, limit, columns)
+        query = QueryBuilder.build_select(table, where, orderby, limit, columns)
         if isinstance(table, Table):
             return table.to_table(self.execute(query, values), columns=columns)
         else:
             return self.execute(query, values)
 
+    def select_record_iter(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
+        """ Support these keywords where, values, orderby, limit and columns"""
+        query = QueryBuilder.build_select(table, where, orderby, limit, columns)
+        if isinstance(table, Table):
+            for row_tuple in self.execute(query, values):
+                yield table.to_obj(row_tuple, columns=columns)
+        else:
+            return self.execute(query, values)
+
     def insert_record(self, table, values, columns=None):
-        query = self.schema.query_builder.build_insert(table, values, columns)
+        query = QueryBuilder.build_insert(table, values, columns)
         self.execute(query, values)
         return self.cur.lastrowid
 
     def update_record(self, table, new_values, where='', where_values=None, columns=None):
-        query = self.schema.query_builder.build_update(table, where, columns)
+        query = QueryBuilder.build_update(table, where, columns)
         return self.execute(query, new_values + where_values if where_values else new_values)
 
     def delete_record(self, table, where=None, values=None):
-        query = self.schema.query_builder.build_delete(table, where)
+        query = QueryBuilder.build_delete(table, where)
         logging.getLogger(__name__).debug("Executing: {q} | values={v}".format(q=query, v=values))
         return self.execute(query, values)
 
@@ -495,13 +536,24 @@ class ExecutionContext(object):
         self.delete_record(table, where, where_values)
 
     def select(self, query, params=None):
+        """ Select and fetch all rows """
+        # TODO: default to select_iter from ver 0.3 for better performance?
+        return self.execute(query, params).fetchall()
+
+    def select_all(self, query, params=None):
+        """ Select and fetch all rows """
         return self.execute(query, params).fetchall()
 
     def select_single(self, query, params=None):
+        """ Select, fetch, and return the first row """
         return self.execute(query, params).fetchone()
 
     def select_scalar(self, query, params=None):
+        """ Select, fetch and return the first value of the first row """
         return self.select_single(query, params)[0]
+
+    def select_iter(self, query, params=None):
+        return self.execute(query, params)
 
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
@@ -533,14 +585,10 @@ class ExecutionContext(object):
 
     def close(self):
         """ Try closing current transaction """
-        try:
-            if not self.__closed and self.conn is not None:
-                if self.auto_commit:
-                    self.commit()
-                self.conn.close()
-        except Exception:
-            logging.getLogger(__name__).exception("Error while closing connection")
-        finally:
+        if self.is_open:
+            if self.auto_commit:
+                self.commit()
+            self.conn.close()
             self.conn = None
             self.__closed = True
 
@@ -559,15 +607,12 @@ class ExecutionContext(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        if not self.__closed:
-            try:
-                self.close()
-            except Exception as e:
-                logging.getLogger(__name__).exception("Error was raised while closing DB connection. e = %s" % e)
+        if self.is_open:
+            self.close()
 
 
-class Schema(object):
-    """ Contains schema definition of a database
+class Database(object):
+    """ Represents a database
     """
     def __init__(self, data_source=':memory:', setup_script=None, setup_file=None, auto_commit=True, auto_expand_path=True, strict_mode=False):
         if not data_source:
@@ -624,8 +669,8 @@ class Schema(object):
         raise AttributeError('Attribute {} does not exist'.format(name))
 
 
-# TODO: Will rename Schema to Database in future release
-Database = Schema
+# TODO: Will rename Schema to Database in future release (>= 0.3)
+Schema = Database
 
 
 def with_ctx(func=None):
