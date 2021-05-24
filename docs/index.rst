@@ -22,8 +22,6 @@ using ``pip``.
 .. code:: bash
 
     pip install puchikarui
-    # or with python -m pip
-    python3 -m pip install puchikarui
 
 Sample code
 -----------
@@ -61,11 +59,12 @@ Sample code
     for person in people:
       print(person.ID, person.name, person.age)
 
-For more examples please see ``puchikarui.demo.py``
+For more examples please see the demo files
 
 .. code:: bash
 
-    python3 puchikarui.demo.py
+   python3 demo_helloworld.py
+   python3 demo_orm.py
 
 Why puchikarui
 --------------
@@ -119,7 +118,7 @@ lightweight library that makes working with ``sqlite3`` simpler.
    :maxdepth: 2
    :caption: Contents:
 
-
+   demos/index
 
 Indices and tables
 ==================
