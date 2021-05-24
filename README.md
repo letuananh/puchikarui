@@ -12,6 +12,28 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 ## Sample code
 
 ```python
+import os
+from puchikarui import Database
+
+db = Database("test/data/demo.db",
+              setup_script="""CREATE TABLE person(
+                ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                age INTEGER);
+              """)
+# create new persons
+for name, age in zip("ABCDE", range(20, 25)):
+    db.insert("person", name=f"Person {name}", age=age)
+# update data
+db.update("person", "age = age + 2", where="age >= 20")
+# Select data using parameters
+for person in db.select("person", where="age > ?", values=(23,)):
+    print(dict(person))
+```
+
+## Sample ORM code
+
+```python
 from puchikarui import Database
 
 INIT_SCRIPT = '''
@@ -64,10 +86,11 @@ If you want ORM features, please consider [PonyORM](https://ponyorm.org/), [SQLA
 
 ### Features
 
-- Working with simple usecases is simple, just create a new database object with `db = Database('file.db')` and start working
+- Working with simple use cases is simple (e.g. just create a new DB object with `db = Database('file.db')` and start working)
 - Database can be loaded into memory before querying for boosting up performance
-- Flexible execution context management, auto create, use, and close connections and cursors
-- It's simple to define database schemas
+- connections and cursors can be created, used, and closed automatically or manually
+- Flexible execution context management (single or multiple cursors)  
+- Defining database schemas is simple
 
 ## Meaning
 
