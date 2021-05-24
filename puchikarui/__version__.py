@@ -10,6 +10,6 @@ __description__ = "A minimalist SQLite wrapper library for Python which supports
 __url__ = "https://github.com/letuananh/puchikarui/"
 __maintainer__ = "Le Tuan Anh"
 __version_major__ = "0.2"
-__version__ = "{}a1".format(__version_major__)
+__version__ = "{}a1.post1".format(__version_major__)
 __version_long__ = "{} - Alpha 1".format(__version_major__)
 __status__ = "3 - Alpha"
