@@ -2,8 +2,8 @@
 .*
 *~
 *.pyc
-puchikarui.test.db
-test/data/test.db
+test/data/test*.db
+test/data/demo*.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
