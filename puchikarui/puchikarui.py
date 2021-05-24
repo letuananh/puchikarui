@@ -138,10 +138,10 @@ class Table:
         # assign values
         return new_obj
 
-    def ctx(self, ctx):
+    def ctx(self, ctx) -> 'TableContext':
         return TableContext(self, ctx)
 
-    def __ds_ctx(self):
+    def __ds_ctx(self) -> 'TableContext':
         return getattr(self._data_source, self.name)
 
     def select_single(self, where=None, values=None, orderby=None, limit=None, columns=None, ctx=None):
@@ -169,34 +169,28 @@ class Table:
             return self.__ds_ctx().insert(*values, columns=columns)
 
     def delete(self, where=None, values=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).delete(where=where, values=values)
-        else:
-            return self.__ds_ctx().delete(where=where, values=values)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.delete(where=where, values=values)
 
     def delete_obj(self, obj, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).delete_obj(obj)
-        else:
-            return self.__ds_ctx().delete_obj(obj)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.delete_obj(obj)
+        
+    def update(self, set_expr, where='', values=None, ctx=None):
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.update(set_expr, where=where, values=values)
 
-    def update(self, new_values, where='', where_values=None, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).update(new_values, where, where_values, columns)
-        else:
-            return self.__ds_ctx().update(new_values, where, where_values, columns)
+    def update_record(self, new_values, where='', where_values=None, columns=None, ctx=None):
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        ctx.update_record(new_values, where, where_values, columns)
 
     def by_id(self, *args, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).by_id(*args, columns=columns)
-        else:
-            return self.__ds_ctx().by_id(*args, columns=columns)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.by_id(*args, columns=columns)
 
     def save(self, obj, columns=None, ctx=None):
-        if ctx is not None:
-            return self.ctx(ctx).save(obj, columns)
-        else:
-            return self.__ds_ctx().save(obj, columns)
+        ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
+        return ctx.save(obj, columns)
 
 
 class DataSource:
@@ -306,7 +300,7 @@ class QueryBuilder(object):
         self.schema = schema
 
     @classmethod
-    def build_select(cls, table, where=None, orderby=None, limit=None, columns=None):
+    def build_select(cls, table, where=None, orderby=None, limit=None, columns=None) -> str:
         query = []
         if isinstance(table, Table):
             if not columns:
@@ -330,7 +324,7 @@ class QueryBuilder(object):
         return ''.join(query)
 
     @classmethod
-    def build_insert(cls, table, values, columns=None):
+    def build_insert(cls, table, values, columns=None) -> str:
         """ Insert an active record into DB and return lastrowid if available """
         if isinstance(table, Table):
             table_name = table.name
@@ -349,31 +343,41 @@ class QueryBuilder(object):
         return query
 
     @classmethod
-    def build_update(cls, table, where='', columns=None):
+    def build_update_record(cls, table, where='', columns=None) -> str:
+        table_name = table.name if isinstance(table, Table) else str(table)
         if columns is None:
             columns = table.columns
         set_fields = []
         for col in columns:
             set_fields.append("{c}=?".format(c=col))
         if where:
-            query = 'UPDATE {t} SET {sf} WHERE {where}'.format(t=table.name, sf=', '.join(set_fields), where=where)
+            query = 'UPDATE {t} SET {sf} WHERE {where}'.format(t=table_name, sf=', '.join(set_fields), where=where)
         else:
-            query = 'UPDATE {t} SET {sf}'.format(t=table.name, sf=', '.join(set_fields))
+            query = 'UPDATE {t} SET {sf}'.format(t=table_name, sf=', '.join(set_fields))
         return query
 
     @classmethod
-    def build_delete(cls, table, where=None):
+    def build_delete(cls, table, where=None) -> str:
+        table_name = table.name if isinstance(table, Table) else str(table)
         if where:
-            query = "DELETE FROM {tbl} WHERE {where}".format(tbl=table.name, where=where)
+            query = "DELETE FROM {tbl} WHERE {where}".format(tbl=table_name, where=where)
         else:
-            query = "DELETE FROM {tbl}".format(tbl=table.name)
+            query = "DELETE FROM {tbl}".format(tbl=table_name)
         return query
+
+    @classmethod
+    def build_update(cls, table, set_expr, where):
+        table_name = table.name if isinstance(table, Table) else str(table)
+        if not where and not where.strip():
+            return f"UPDATE {table_name} SET {set_expr}"
+        else:
+            return f"UPDATE {table_name} SET {set_expr} WHERE {where}"
 
 
 class TableContext(object):
     def __init__(self, table, context):
         self._table = table
-        self._context = context
+        self._context: ExecutionContext = context
 
     def select(self, where=None, values=None, **kwargs):
         return self._context.select_record(self._table, where, values, **kwargs)
@@ -391,7 +395,7 @@ class TableContext(object):
     def insert(self, *values, columns=None):
         return self._context.insert_record(self._table, values, columns)
 
-    def update(self, new_values, where='', where_values=None, columns=None):
+    def update_record(self, new_values, where='', where_values=None, columns=None):
         return self._context.update_record(self._table, new_values, where, where_values, columns)
 
     def delete(self, where=None, values=None):
@@ -413,6 +417,9 @@ class TableContext(object):
 
     def delete_obj(self, obj):
         return self._context.delete_object(self._table, obj)
+
+    def update(self, set_expr, where='', values=None):
+        return self._context.update(self._table, set_expr, where=where, values=values)
 
 
 class ExecutionContext(object):
@@ -498,7 +505,7 @@ class ExecutionContext(object):
         return self.cur.lastrowid
 
     def update_record(self, table, new_values, where='', where_values=None, columns=None):
-        query = QueryBuilder.build_update(table, where, columns)
+        query = QueryBuilder.build_update_record(table, where, columns)
         return self.execute(query, new_values + where_values if where_values else new_values)
 
     def delete_record(self, table, where=None, values=None):
@@ -554,6 +561,10 @@ class ExecutionContext(object):
 
     def select_iter(self, query, params=None):
         return self.execute(query, params)
+
+    def update(self, table, set_expr, where='', values=None):
+        query = QueryBuilder.build_update(table, set_expr, where=where)
+        return self.execute(query, values)
 
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
