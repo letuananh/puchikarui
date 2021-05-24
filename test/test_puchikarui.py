@@ -198,11 +198,18 @@ class TestSchema(unittest.TestCase):
         expected = ['Zeus', 'Thor', 'Odin']
         self.assertEqual(expected, names)
         # update their ages
-        for p in schema.person.select():
-            p.age += 2
+        for p in schema.person.select("age > 1000"):
+            p.age += 1
             schema.person.save(p)
+        # test update using update_record
+        for p in schema.person.select("age > 1000"):
+            schema.person.update_record((p.age + 1,), "ID = ?", (p.ID,), ("age",))
+        # test table update()
+        schema.person.update("age = age + 1")
+        schema.person.update("age = age + 1", "age > 1000")
+        schema.update("person", "age = age + 1", "age > 1000")
         ages = [x[0] for x in ctx.select_all("SELECT age FROM person WHERE age > 1000")]
-        self.assertEqual([3724, 1505, 10002], ages)
+        self.assertEqual([3727, 1508, 10005], ages)
 
     def test_memory_source_no_schema(self):
         if TEST_DB.is_file():
@@ -222,9 +229,11 @@ class TestSchema(unittest.TestCase):
         self.assertEqual(expected, ids)
         # test select without schema
         recs = ctx.select_record_iter("person", "id > 3")
+        for r in recs:
+            print(r)
         # test MemorySource with schema
         mem_source = MemorySource(TEST_DB)
-        ctx = mem_source.open(schema=schema)
+        ctx = mem_source.open(schema=schema, force_iterdump=True)
         ids = {id for (id,) in ctx.double(row_factory=None).select_iter("SELECT ID FROM Person")}
         expected = {1, 2, 3, 4, 5, 6}
         self.assertEqual(expected, ids)
@@ -419,7 +428,7 @@ class TestDemoLib(unittest.TestCase):
             p = ctx.person.select_single(where='name=?', values=('Dunno',))
             self.assertIsNone(p)
             # Test update data & select single
-            ctx.person.update((10,), "name=?", ("Totoro",), columns=('age',))
+            db.person.update_record((10,), "name=?", ("Totoro",), columns=('age',), ctx=ctx)
             totoro = ctx.person.select_single(where='name=?', values=('Totoro',))
             self.assertEqual(totoro.age, 10)
             # test updated
