@@ -18,6 +18,8 @@ import functools
 # -------------------------------------------------------------
 # Helper functions
 # -------------------------------------------------------------
+from typing import Sequence
+
 
 def update_obj(source, target, *fields, **field_map):
     source_dict = source.__dict__ if hasattr(source, '__dict__') else source
@@ -69,7 +71,8 @@ def contain_like(input_string, **kwargs):
 
 # A table schema
 class Table:
-    def __init__(self, name, *columns, data_source=None, proto=None, id_cols=('rowid',), strict_mode=False, **field_map):
+    def __init__(self, name, *columns, data_source=None, proto=None, id_cols: Sequence = None,
+                 strict_mode=False, **field_map):
         """ Contains information of a table in the database
             strict_mode -- Warn users if a bad database design is detected (defaulted to False)
         """
@@ -79,7 +82,12 @@ class Table:
         self.add_fields(*columns)
         self._data_source = data_source
         self._proto = proto
-        self._id_cols = id_cols if id_cols else []
+        if not id_cols:
+            self._id_cols = []
+        elif isinstance(id_cols, str):
+            self._id_cols = id_cols.split()
+        else:
+            self._id_cols = id_cols
         self._field_map = field_map
 
     def add_fields(self, *columns):
@@ -657,6 +665,9 @@ class Database(object):
         """ Add a new table design to this schema """
         if not columns:
             columns = []
+        elif isinstance(columns, str):
+            # warning?
+            columns = columns.split()
         tbl_obj = Table(name, *columns, data_source=self.__data_source, proto=proto, id_cols=id_cols, strict_mode=self._strict_mode, **field_map)
         setattr(self, name, tbl_obj)
         self._tables[name] = tbl_obj
