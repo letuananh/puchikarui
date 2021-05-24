@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-Puchi Karui - Minimalist SQLite ORM engine for Python
+Puchikarui - A minimalist SQLite wrapper library for Python which supports ORM features.
 
 Latest version can be found at https://github.com/letuananh/puchikarui
 
@@ -42,6 +42,6 @@ from .puchikarui import DataSource, MemorySource
 # helpers
 from .puchikarui import escape_like, head_like, tail_like, contain_like
 
-__all__ = ["Schema", "Table", "ExecutionContext",
+__all__ = ["Database", "Table", "ExecutionContext",
            "DataSource", "MemorySource", "with_ctx",
            "__version__", "__author__", "__description__", "__copyright__"]
