@@ -198,12 +198,11 @@ class TestSchema(unittest.TestCase):
         expected = ['Zeus', 'Thor', 'Odin']
         self.assertEqual(expected, names)
         # update their ages
-        for p in schema.person.select_iter():
+        for p in schema.person.select():
             p.age += 2
-            schema.person.update(
-            schema.person.update("age = age + 2", "age > ?", (1000,))
+            schema.person.save(p)
         ages = [x[0] for x in ctx.select_all("SELECT age FROM person WHERE age > 1000")]
-        self.assertEqual([3722, 1503, 10000], ages)
+        self.assertEqual([3724, 1505, 10002], ages)
 
     def test_memory_source_no_schema(self):
         if TEST_DB.is_file():
@@ -223,8 +222,6 @@ class TestSchema(unittest.TestCase):
         self.assertEqual(expected, ids)
         # test select without schema
         recs = ctx.select_record_iter("person", "id > 3")
-        for r in recs:
-            print(r)
         # test MemorySource with schema
         mem_source = MemorySource(TEST_DB)
         ctx = mem_source.open(schema=schema)
