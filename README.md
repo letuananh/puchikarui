@@ -66,7 +66,7 @@ for person in people:
   print(person.ID, person.name, person.age)
 ```
 
-For more information please see [puchikarui documentation](https://puchikarui.readthedocs.io>).
+For more information please see [puchikarui documentation](https://puchikarui.readthedocs.io).
 
 ## Installation
 
@@ -89,7 +89,8 @@ If you want ORM features, please consider [PonyORM](https://ponyorm.org/), [SQLA
 - Working with simple use cases is simple (e.g. just create a new DB object with `db = Database('file.db')` and start working)
 - Database can be loaded into memory before querying for boosting up performance
 - connections and cursors can be created, used, and closed automatically or manually
-- Flexible execution context management (single or multiple cursors)  
+- Flexible execution context management (single or multiple cursors)
+- Use up-to-date database best practices (using parameters to prevent SQL injection, optimize settings for buck insert, et cetera)
 - Defining database schemas is simple
 
 ## Meaning
