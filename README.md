@@ -15,12 +15,13 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 import os
 from puchikarui import Database
 
+setup_script = """
+CREATE TABLE person(
+   ID INTEGER PRIMARY KEY AUTOINCREMENT,
+   name TEXT NOT NULL,
+   age INTEGER);"""
 db = Database("test/data/demo.db",
-              setup_script="""CREATE TABLE person(
-                ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                age INTEGER);
-              """)
+              setup_script=setup_script)
 # create new persons
 for name, age in zip("ABCDE", range(20, 25)):
     db.insert("person", name=f"Person {name}", age=age)
