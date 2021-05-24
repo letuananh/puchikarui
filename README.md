@@ -7,7 +7,7 @@ A minimalist SQLite helper library for Python 3 which supports ORM features.
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/letuananh/puchikarui.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/letuananh/puchikarui/alerts/)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/letuananh/puchikarui.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/letuananh/puchikarui/context:python)
 [![Build Status](https://travis-ci.org/letuananh/puchikarui.svg?branch=master)](https://travis-ci.org/letuananh/puchikarui)
-[![codecov](https://codecov.io/gh/letuananh/puchikarui/branch/master/graph/badge.svg?token=10CEOU8F8M)](https://codecov.io/gh/letuananh/puchikarui)
+[![codecov](https://codecov.io/gh/letuananh/puchikarui/branch/main/graph/badge.svg?token=10CEOU8F8M)](https://codecov.io/gh/letuananh/puchikarui)
 
 ## Sample code
 
