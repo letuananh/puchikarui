@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-''' Puchikarui demo script
+""" Puchikarui demo script
 
 Latest version can be found at https://github.com/letuananh/puchikarui
-
-@author: Le Tuan Anh <tuananh.ke@gmail.com>
-@license: MIT
-'''
+"""
 
 # Copyright (c) 2014, Le Tuan Anh <tuananh.ke@gmail.com>
 
@@ -38,7 +35,7 @@ from puchikarui import Schema
 
 MY_DIR = os.path.dirname(__file__)
 SETUP_FILE = os.path.join(MY_DIR, 'test/data/init_script.sql')
-TEST_DB = os.path.join(MY_DIR, 'test/data/demo.db')
+TEST_DB = os.path.join(MY_DIR, 'test/data/demo_orm.db')
 
 
 # ----------------------------------------------------------------------
@@ -56,9 +53,10 @@ class Person(object):
 
 
 class SchemaDemo(Schema):
+
     def __init__(self, data_source, setup_file=SETUP_FILE):
         Schema.__init__(self, data_source, setup_file=setup_file)
-        self.add_table('person', ['ID', 'name', 'age'], id_cols=('ID',), proto=Person)
+        self.add_table('person', 'ID name age', id_cols='ID', proto=Person)
         self.add_table('hobby', ['pid', 'hobby'])
 
 
@@ -76,14 +74,14 @@ def main():
         db.person.save(Person('Buu', 1000))
     # test select
     persons = db.person.select(orderby='age')
-    print("There are {} people.".format(len(persons)))
+    print(f"There are {len(persons)} people.")
     for person in persons:
-        print("%s is %d years old." % (person.name, person.age))
+        print(f"{person.name} is {person.age} years old.")
     # update data
     buu = db.person.select_single('name=?', ('Buu',))
     buu.age += 1
     db.person.save(buu)
-    print("Buu aged now => {}".format(db.person.by_id(buu.ID)))
+    print(f"Aged Buu => {db.person.by_id(buu.ID)}")
 
 
 if __name__ == "__main__":
