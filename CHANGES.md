@@ -8,6 +8,7 @@
 ## puchikarui 0.2a2
 
 - 2021-05-24
+  - 100% coverage test
   - Renamed old `ctx.select*()` functions `to query_*()`
     (The old `select()` was just `execute().fetchall()`)
   - Renamed `select_record()` to `select()`
