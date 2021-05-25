@@ -1,9 +1,12 @@
-# Changes
+# Puchikarui changelog
 
-## puchikarui 0.2a2
+## puchikarui 0.2a3
 
 - 2021-05-25
   - Switch off `auto_commit` when `buckmode` is enabled for much better performance
+
+## puchikarui 0.2a2
+
 - 2021-05-24
   - Renamed old `ctx.select*()` functions `to query_*()`
     (The old `select()` was just `execute().fetchall()`)
