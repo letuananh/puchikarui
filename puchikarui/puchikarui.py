@@ -445,6 +445,7 @@ class ExecutionContext(object):
         self.cur = self.conn.cursor()
         self.schema = schema
         self.auto_commit = auto_commit
+        self.__buckmode = False
         self.__closed = False
 
     def double(self, **kwargs) -> 'ExecutionContext':
@@ -471,7 +472,19 @@ class ExecutionContext(object):
         self.cur.execute("PRAGMA cache_size=80000000")
         self.cur.execute("PRAGMA journal_mode=MEMORY")
         self.cur.execute("PRAGMA temp_store=MEMORY")
+        self.__buckmode = True
         # self.cur.execute("PRAGMA count_changes=OFF")
+        return self
+
+    def buckmode_off(self):
+        """ Switch buckmode off
+
+        Added in puchikarui 0.2a2
+        """
+        # self.cur.execute("PRAGMA cache_size=2000")
+        self.cur.execute("PRAGMA journal_mode=1")
+        self.cur.execute("PRAGMA temp_store=0")
+        self.__buckmode = False
         return self
 
     def begin(self):
@@ -488,6 +501,13 @@ class ExecutionContext(object):
             self.conn.commit()
         else:
             raise sqlite3.OperationalError("Connection was closed. commit() failed")
+
+    def vacuum(self):
+        """ Clean up database 
+
+        Added in puchikarui 0.2a2
+        """
+        self.execute("VACUUM;")
 
     def select(self, table, where=None, values=None, orderby=None, limit=None, columns=None):
         """ Support these keywords where, values, orderby, limit and columns"""
@@ -559,7 +579,7 @@ class ExecutionContext(object):
     def query_row(self, query, params=None):
         """ Select, fetch, and return the first row """
         return self.execute(query, params).fetchone()
-    
+
     def query_all(self, query, params=None):
         """ Select, fetch and return all rows """
         return self.execute(query, params).fetchall()
@@ -580,7 +600,7 @@ class ExecutionContext(object):
                 _r = self.cur.execute(query, params)
             else:
                 _r = self.cur.execute(query)
-            if self.auto_commit:
+            if not self.__buckmode and self.auto_commit:
                 self.commit()
             return _r
         except Exception:
@@ -590,7 +610,7 @@ class ExecutionContext(object):
     def executescript(self, query):
         """ Execute an SQL script (update, delete, etc.) """
         _r = self.cur.executescript(query)
-        if self.auto_commit:
+        if not self.__buckmode and self.auto_commit:
             self.commit()
         return _r
 
