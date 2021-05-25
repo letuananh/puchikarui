@@ -9,7 +9,6 @@
 
 import io
 from pathlib import Path
-from itertools import cycle
 import timeit
 import cProfile
 import pstats
