@@ -246,7 +246,7 @@ class DataSource:
         # run setup files
         if schema is not None and schema.setup_files:
             for file_path in schema.setup_files:
-                logging.getLogger(__name__).info("Executing script file: {}".format(file_path))
+                logging.getLogger(__name__).debug("Executing script file: {}".format(file_path))
                 exe.cur.executescript(self._read_file(file_path))
         # run setup scripts
         if schema is not None and schema.setup_scripts:
@@ -298,7 +298,6 @@ class MemorySource(DataSource):
                 __cur.execute("PRAGMA synchronous=OFF")
                 buckmode(__cur)
                 for line in source.iterdump():
-                    logging.getLogger(__name__).debug(f"Executing {repr(line)}")
                     __cur.execute(line)
             else:
                 # use backup if possible
@@ -559,7 +558,6 @@ class ExecutionContext(object):
 
     def delete_record(self, table, where=None, values=None):
         query = QueryBuilder.build_delete(table, where)
-        logging.getLogger(__name__).debug("Executing: {q} | values={v}".format(q=query, v=values))
         return self.execute(query, values)
 
     def select_object_by_id(self, table, ids, columns=None):
@@ -606,7 +604,6 @@ class ExecutionContext(object):
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         try:
-            logging.getLogger(__name__).debug('Executing q={} | p={}'.format(query, params))
             if params:
                 _r = self.cur.execute(query, params)
             else:
