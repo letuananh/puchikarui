@@ -24,3 +24,5 @@
 - [2018-03-03] Auto expanduser path.
 - [2018-01-24] First release to PyPI
 - [2015-09-09] Reorganise project structure
+- [2014-10-24] First release to Github (with code extracted from the old homemade TinyORM library)
+- [2014-09-11] Created `puchikarui` repository on Github
