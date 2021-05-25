@@ -68,7 +68,7 @@ setup(
     keywords="SQLite sqlite3 database",
     tests_require=[],
     install_requires=[],
-    python_requires="~=3.6,~=3.7,~=3.8,~=3.9",
+    python_requires=">=3.6",
     extras_require={
         'docs': ["Sphinx"],
         'dev': [
