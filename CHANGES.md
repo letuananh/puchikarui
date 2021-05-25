@@ -2,9 +2,14 @@
 
 ## puchikarui 0.2a2
 
+- 2021-05-25
+  - Switch off `auto_commit` when `buckmode` is enabled for much better performance
 - 2021-05-24
-  - Add select_iter() to be able to select() without fetch_all()
-  - Add double() function to use multiple cursors in a single ExecutionContext
+  - Renamed old `ctx.select*()` functions `to query_*()`
+    (The old `select()` was just `execute().fetchall()`)
+  - Renamed `select_record()` to `select()`
+  - Add `select_iter()` to allow avoiding fetchall()
+  - Add `ctx.double()` function to use multiple cursors in a single ExecutionContext
 
 ## puchikarui 0.2a1
 
