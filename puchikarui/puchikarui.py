@@ -10,7 +10,9 @@
 import os
 import sys
 import sqlite3
-import collections
+from collections import namedtuple
+from collections import Mapping
+from typing import Sequence
 import logging
 import functools
 
@@ -18,8 +20,6 @@ import functools
 # -------------------------------------------------------------
 # Helper functions
 # -------------------------------------------------------------
-from collections import Mapping
-from typing import Sequence
 
 
 def update_obj(source, target, *fields, **field_map):
@@ -95,10 +95,10 @@ class Table:
         self.columns.extend(columns)
         if self._strict_mode:
             try:
-                collections.namedtuple(self.name, self.columns, rename=False)
+                namedtuple(self.name, self.columns, rename=False)
             except Exception as ex:
                 logging.getLogger(__name__).warning("WARNING: Bad database design detected (Table: %s (%s)" % (self.name, self.columns))
-        self.template = collections.namedtuple(self.name, self.columns, rename=True)
+        self.template = namedtuple(self.name, self.columns, rename=True)
         return self
 
     @property
@@ -136,7 +136,7 @@ class Table:
         # fall back to row_tuple
         if not self._proto:
             if columns:
-                new_tuples = collections.namedtuple(self.name, columns, rename=True)
+                new_tuples = namedtuple(self.name, columns, rename=True)
                 return self.to_row(row_tuple, new_tuples)
             else:
                 return self.to_row(row_tuple)
