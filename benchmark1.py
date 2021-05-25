@@ -79,7 +79,7 @@ def benchmark1(row_count=10000):
 def _timeit():
     repeat = 5
     t = timeit.timeit(lambda: benchmark1(), number=repeat)
-    print(f"timeit ({repeat} times): {t}")
+    print(f"timeit ({repeat} times): {t} secs | avg: {t / repeat} secs")
 
 
 def profile_it(benchmark_func, sort_fields=["cumulative", "filename", "ncalls"]):
