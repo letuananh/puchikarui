@@ -13,10 +13,11 @@ import timeit
 import cProfile
 import pstats
 from benchmark1 import SchemaDemo, DB_PATH, __version__
+from puchikarui import MemorySource
 
 
-def benchmark2():
-    db = SchemaDemo(DB_PATH)
+def benchmark3():
+    db = SchemaDemo(MemorySource(DB_PATH))
     persons = db.person.select()
     names = {p.name for p in persons}
     for n in names:
@@ -25,8 +26,8 @@ def benchmark2():
 
 def _timeit():
     repeat = 5
-    t = timeit.timeit(lambda: benchmark2(), number=repeat)
-    print(f"timeit ({repeat} times): {t} secs | avg: {t / repeat} secs")
+    t = timeit.timeit(lambda: benchmark3(), number=repeat)
+    print(f"timeit ({repeat} times): {t:.3f} secs | avg: {t / repeat:.3f} secs")
 
 
 def profile_it(benchmark_func, sort_fields=["cumulative", "filename", "ncalls"]):
@@ -44,12 +45,12 @@ def profile_it(benchmark_func, sort_fields=["cumulative", "filename", "ncalls"])
 
 
 if __name__ == "__main__":
-    print(f"Benchmarking #2: querying data | puchikarui version {__version__}")
-    lines = profile_it(benchmark2)
+    print(f"Benchmarking #3: MemorySource | puchikarui version {__version__}")
+    lines = profile_it(benchmark3)
     parent = Path(__file__).absolute().parent
     for idx, l in enumerate(lines):
         if idx >= 6 and 'puchikarui' not in l:
             continue
         print(l.replace(str(parent), parent.name))
     _timeit()
-    print(f"Benchmarking #2: querying data | puchikarui version {__version__}")
+    print(f"Benchmarking #3: MemorySource | puchikarui version {__version__}")

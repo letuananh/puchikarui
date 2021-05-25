@@ -270,6 +270,22 @@ class TestSchema(unittest.TestCase):
                   (db.person.by_id(7), db.person.by_id(1006))]
         expected = [(7, 'Person 1', 1), (1006, 'Person 1000', 1000)]
         self.assertEqual(expected, actual)
+        # test buckmode on and off
+        db.buckmode()
+        for i in range(100):
+            db.person.insert("test {i}", i)
+        db.buckmode_off()
+        db.commit()
+        persons = db.person.select()
+        self.assertEqual(1106, len(persons))
+
+    def test_vacuum(self):
+        db = SchemaDemo()
+        persons = db.person.select()
+        self.assertEqual(6, len(persons))
+        db.vacuum()
+        persons = db.person.select()
+        self.assertEqual(6, len(persons))
 
     def test_accessing_weird_attr(self):
         s = SchemaDemo()

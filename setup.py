@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-'''
+"""
 Setup script for puchikarui library
 
 Latest version can be found at https://github.com/letuananh/puchikarui
 
 @author: Le Tuan Anh <tuananh.ke@gmail.com>
 @license: MIT
-'''
+"""
 
 # Copyright (c) 2015, Le Tuan Anh <tuananh.ke@gmail.com>
 #
@@ -35,9 +35,6 @@ Latest version can be found at https://github.com/letuananh/puchikarui
 import io
 import os
 from setuptools import setup
-
-
-########################################################################
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -71,6 +68,15 @@ setup(
     keywords="SQLite sqlite3 database",
     tests_require=[],
     install_requires=[],
+    python_requires=">=3.6",
+    extras_require={
+        'docs': ["Sphinx"],
+        'dev': [
+            'setuptools >= 38.6.0',
+            'wheel >= 0.31.0',
+            'twine >= 1.11.0',
+            "Sphinx"
+        ]},
     author_email=pkg_info['__email__'],
     description=pkg_info['__description__'],
     long_description=long_description,
@@ -78,13 +84,17 @@ setup(
     packages=['puchikarui'],
     include_package_data=True,
     platforms='any',
-    classifiers=['Programming Language :: Python',
-                 'Development Status :: {}'.format(pkg_info['__status__']),
-                 'Natural Language :: English',
-                 'Environment :: Plugins',
-                 'Intended Audience :: Developers',
-                 'License :: OSI Approved :: {}'.format(pkg_info['__license__']),
-                 'Operating System :: OS Independent',
-                 'Topic :: Software Development :: Libraries :: Python Modules',
-                 'Topic :: Database']
+    classifiers=[
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Development Status :: {}'.format(pkg_info['__status__']),
+        'Environment :: Plugins',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: {}'.format(pkg_info['__license__']),
+        'Operating System :: OS Independent',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+        'Topic :: Database']
 )

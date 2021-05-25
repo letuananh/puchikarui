@@ -66,11 +66,26 @@ def contain_like(input_string, **kwargs):
     return '%' + escape_like(input_string, **kwargs) + '%'
 
 
+def buckmode(cur, cache_size=80000000, journal_mode="OFF"):
+    # cur.execute("PRAGMA synchronous=OFF")
+    cur.execute(f"PRAGMA cache_size={cache_size}")
+    cur.execute("PRAGMA temp_store=MEMORY")
+    cur.execute("PRAGMA locking_mode=EXCLUSIVE")
+    cur.execute(f"PRAGMA journal_mode={journal_mode}")  # or 'MEMORY'?
+
+
+def normal_mode(cur):
+    # cur.execute("PRAGMA synchronous = 2")
+    cur.execute("PRAGMA cache_size=2000")
+    cur.execute("PRAGMA locking_mode = NORMAL")
+    cur.execute("PRAGMA journal_mode=1")
+    cur.execute("PRAGMA temp_store=0")
+
+
 # -------------------------------------------------------------
 # Classes
 # -------------------------------------------------------------
 
-# A table schema
 class Table:
     def __init__(self, name, *columns, data_source=None, proto=None, id_cols: Sequence = None,
                  strict_mode=False, **field_map):
@@ -176,7 +191,7 @@ class Table:
     def delete_obj(self, obj, ctx=None):
         ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
         return ctx.delete_obj(obj)
-        
+
     def update(self, set_expr, where='', values=None, ctx=None):
         ctx = self.__ds_ctx() if ctx is None else self.ctx(ctx)
         return ctx.update(set_expr, where=where, values=values)
@@ -231,7 +246,7 @@ class DataSource:
         # run setup files
         if schema is not None and schema.setup_files:
             for file_path in schema.setup_files:
-                logging.getLogger(__name__).info("Executing script file: {}".format(file_path))
+                logging.getLogger(__name__).debug("Executing script file: {}".format(file_path))
                 exe.cur.executescript(self._read_file(file_path))
         # run setup scripts
         if schema is not None and schema.setup_scripts:
@@ -258,12 +273,8 @@ class DataSource:
         return self.__default_ctx_obj
 
     def __getattr__(self, name):
-        # try to get function from default context
         _ctx = self.__default_ctx()
-        if hasattr(_ctx, name):
-            return getattr(_ctx, name)
-        else:
-            raise AttributeError('Attribute {} does not exist'.format(name))
+        return getattr(_ctx, name)
 
 
 class MemorySource(DataSource):
@@ -284,8 +295,9 @@ class MemorySource(DataSource):
             self.__conn = sqlite3.connect(":memory:")
             if sys.version_info < (3, 7) or force_iterdump:
                 __cur = self.__conn.cursor()
+                __cur.execute("PRAGMA synchronous=OFF")
+                buckmode(__cur)
                 for line in source.iterdump():
-                    logging.getLogger(__name__).debug(f"Executing {repr(line)}")
                     __cur.execute(line)
             else:
                 # use backup if possible
@@ -385,7 +397,7 @@ class TableContext(object):
     def __init__(self, table, context):
         self._table = table
         self._context: ExecutionContext = context
-        
+
     def to_table(self, *args, **kwargs):
         return self._table.to_table(*args, **kwargs)
 
@@ -444,6 +456,9 @@ class ExecutionContext(object):
             self.conn.row_factory = row_factory
         self.cur = self.conn.cursor()
         self.schema = schema
+        # if schema is not None:
+        #     for tbl_name, tbl in schema.tables.items():
+        #         setattr(self, tbl_name, TableContext(tbl, self))
         self.auto_commit = auto_commit
         self.__buckmode = False
         self.__closed = False
@@ -466,14 +481,11 @@ class ExecutionContext(object):
     def is_open(self):
         return not self.__closed
 
-    def buckmode(self):
+    def buckmode(self, cache_size=80000000, journal_mode="OFF"):
         """ Optimized setting for buck insert
         """
-        self.cur.execute("PRAGMA cache_size=80000000")
-        self.cur.execute("PRAGMA journal_mode=MEMORY")
-        self.cur.execute("PRAGMA temp_store=MEMORY")
+        buckmode(self.cur, cache_size=cache_size, journal_mode=journal_mode)
         self.__buckmode = True
-        # self.cur.execute("PRAGMA count_changes=OFF")
         return self
 
     def buckmode_off(self):
@@ -481,9 +493,7 @@ class ExecutionContext(object):
 
         Added in puchikarui 0.2a2
         """
-        # self.cur.execute("PRAGMA cache_size=2000")
-        self.cur.execute("PRAGMA journal_mode=1")
-        self.cur.execute("PRAGMA temp_store=0")
+        normal_mode(self.cur)
         self.__buckmode = False
         return self
 
@@ -503,7 +513,7 @@ class ExecutionContext(object):
             raise sqlite3.OperationalError("Connection was closed. commit() failed")
 
     def vacuum(self):
-        """ Clean up database 
+        """ Clean up database
 
         Added in puchikarui 0.2a2
         """
@@ -548,7 +558,6 @@ class ExecutionContext(object):
 
     def delete_record(self, table, where=None, values=None):
         query = QueryBuilder.build_delete(table, where)
-        logging.getLogger(__name__).debug("Executing: {q} | values={v}".format(q=query, v=values))
         return self.execute(query, values)
 
     def select_object_by_id(self, table, ids, columns=None):
@@ -595,7 +604,6 @@ class ExecutionContext(object):
     def execute(self, query, params=None):
         # Try to connect to DB if not connected
         try:
-            logging.getLogger(__name__).debug('Executing q={} | p={}'.format(query, params))
             if params:
                 _r = self.cur.execute(query, params)
             else:
@@ -671,6 +679,10 @@ class Database(object):
         self.query_builder = QueryBuilder(self)
         self._strict_mode = strict_mode
 
+    @property
+    def tables(self):
+        return self._tables
+
     def add_file(self, setup_file):
         self.setup_files.append(setup_file)
         return self
@@ -704,9 +716,7 @@ class Database(object):
 
     def __getattr__(self, name):
         # try to get function from default context
-        if hasattr(self.__data_source, name):
-            return getattr(self.__data_source, name)
-        raise AttributeError('Attribute {} does not exist'.format(name))
+        return getattr(self.__data_source, name)
 
 
 # TODO: Will rename Schema to Database in future release (>= 0.3)
