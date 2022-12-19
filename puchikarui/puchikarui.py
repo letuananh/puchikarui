@@ -11,10 +11,12 @@ import os
 import sys
 import sqlite3
 from collections import namedtuple
-try:
+
+if sys.version_info >= (3, 10):
     from collections.abc import Mapping
-except ImportError:
+else:
     from collections import Mapping
+
 from typing import Sequence
 import logging
 import functools
