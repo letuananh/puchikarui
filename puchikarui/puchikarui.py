@@ -11,7 +11,10 @@ import os
 import sys
 import sqlite3
 from collections import namedtuple
-from collections import Mapping
+try:
+    from collections.abc import Mapping
+except ImportError:
+    from collections import Mapping
 from typing import Sequence
 import logging
 import functools
